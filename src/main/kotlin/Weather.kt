@@ -2,6 +2,7 @@ package top.xuansu.mirai.weather
 
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import net.mamoe.mirai.console.command.CommandManager.INSTANCE.register
 import net.mamoe.mirai.console.plugin.jvm.JvmPluginDescription
@@ -12,6 +13,7 @@ import net.mamoe.mirai.event.globalEventChannel
 import net.mamoe.mirai.message.data.content
 import net.mamoe.mirai.utils.ExternalResource.Companion.uploadAsImage
 import net.mamoe.mirai.utils.info
+import java.io.File
 
 object weatherMain : KotlinPlugin(
     JvmPluginDescription(
@@ -24,16 +26,18 @@ object weatherMain : KotlinPlugin(
 ) {
     var imageFolderPath = ""
     const val imageName = "WeatherImg.png"
+    lateinit var imageFolder: File
 
     override fun onEnable() {
         //初始化命令
         WeatherCommand().register()
+        ProxySetCommand().register()
 
         //初始化Config
         reloadPluginConfig(Config)
 
         //检查并创建图片储存文件夹
-        val imageFolder = dataFolder.resolve("img")
+        imageFolder = dataFolder.resolve("img")
         when {
             imageFolder.exists() -> logger.info("ImgFolder: ${imageFolder.path}")
             else -> {
@@ -44,15 +48,18 @@ object weatherMain : KotlinPlugin(
         }
         imageFolderPath = imageFolder.path
 
+        CoroutineScope(Dispatchers.IO).launch {
+            getWeatherPic()
+        }
+
         globalEventChannel().subscribeAlways<GroupMessageEvent> {
             Config.commands.forEachIndexed { _, cmd ->
                 if (message.content.startsWith(cmd)) {
-                    CoroutineScope(Dispatchers.IO).launch {
-                        // 上传图片
-                        getWeatherPic()
-                        val img = imageFolder.resolve(imageName).uploadAsImage(group, "png")
-                        group.sendMessage(img)
-                    }
+                    // 上传图片
+                    getWeatherPic()
+                    delay(700)
+                    val img = imageFolder.resolve(imageName).uploadAsImage(group, "png")
+                    group.sendMessage(img)
                 }
             }
         }

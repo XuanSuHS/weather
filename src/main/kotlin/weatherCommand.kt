@@ -10,8 +10,7 @@ class WeatherCommand : SimpleCommand(
 ) {
     @Handler
     suspend fun CommandSender.handle() {
-        val imageFolder = weatherMain.dataFolder.resolve("img").path
-        getWeatherPic(imageFolder)
-        sendMessage("End")
+        getWeatherPic()
+        sendMessage("")
     }
 }

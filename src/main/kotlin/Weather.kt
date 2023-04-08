@@ -22,6 +22,9 @@ object weatherMain : KotlinPlugin(
         author("XuanSu")
     }
 ) {
+    var imageFolderPath = ""
+    const val imageName = "WeatherImg.png"
+
     override fun onEnable() {
         //初始化命令
         WeatherCommand().register()
@@ -39,18 +42,15 @@ object weatherMain : KotlinPlugin(
                 logger.info("Create ImgFolder: ${imageFolder.path}")
             }
         }
+        imageFolderPath = imageFolder.path
 
         globalEventChannel().subscribeAlways<GroupMessageEvent> {
             Config.commands.forEachIndexed { _, cmd ->
                 if (message.content.startsWith(cmd)) {
                     CoroutineScope(Dispatchers.IO).launch {
-                        // 指令列表的第一个指令默认为随即调用API
-                        // 指令列表的非第一个指令依照顺序依次调用对应的API
-
-                        //val url = getWeatherURL()
-
-                        // 获取图片
-                        val img = imageFolder.resolve(Config.imageName).uploadAsImage(group, "png")
+                        // 上传图片
+                        getWeatherPic()
+                        val img = imageFolder.resolve(imageName).uploadAsImage(group, "png")
                         group.sendMessage(img)
                     }
                 }

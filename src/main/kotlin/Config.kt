@@ -8,5 +8,4 @@ object Config : AutoSavePluginConfig("config") {
 
     var proxyAddress: String by value("127.0.0.1")
     var proxyPort: Int by value(7890)
-    var imageName: String by value("WeatherImg.png")
 }

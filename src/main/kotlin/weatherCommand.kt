@@ -24,34 +24,81 @@ class WeatherCommand : SimpleCommand(
         val img: Image
         if (getGroupOrNull() != null) {
             group = getGroupOrNull()!!
+
+            //如果本群未启用则退出
+            if (group.id !in Config.enableGroups) {
+                return
+            }
+
             img = imageFolder.resolve(weatherMain.imageName).uploadAsImage(group, "png")
             group.sendMessage(img)
         }
     }
 }
 
-class ProxySetCommand : CompositeCommand(
+class ConfigureCommand : CompositeCommand(
     owner = weatherMain,
-    primaryName = "wt-set"
+    primaryName = "wt"
 ) {
-    @SubCommand("address")
-    suspend fun CommandSender.address(arg: String) {
-        val addressRegex = "(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\$".toRegex()
-        if (!addressRegex.containsMatchIn(arg)) {
-            sendMessage("请输入正确的IPv4地址")
+    @SubCommand("setproxy")
+    suspend fun CommandSender.setproxy(arg: String) {
+
+        //分离地址与端口
+        val port = arg.split(":")[1].toInt()
+
+        //检查端口是否合法
+        if (port < 1 || port > 65535) {
+            sendMessage("请输入正确的端口")
             return
         }
+
         Config.proxyAddress = arg
         Config.save()
     }
 
-    @SubCommand("port")
-    suspend fun CommandSender.port(arg: Int) {
-        if (arg <= 0 || arg >= 65536) {
-            sendMessage("请输入正确的端口")
-            return
+    @SubCommand("getproxy")
+    suspend fun CommandSender.getproxy() {
+        sendMessage("当前代理地址：" + Config.proxyAddress)
+    }
+
+    @SubCommand("enable")
+    suspend fun CommandSender.enable() {
+        val group: Group
+        if (getGroupOrNull() != null) {
+            group = getGroupOrNull()!!
+            Config.enableGroups.add(group.id)
+            Config.save()
+            sendMessage("开启本群天气插件")
+        } else {
+            sendMessage("请在群聊环境下触发")
         }
-        Config.proxyPort = arg
-        Config.save()
+    }
+
+    @SubCommand("disable")
+    suspend fun CommandSender.disable() {
+        val group: Group
+        if (getGroupOrNull() != null) {
+            group = getGroupOrNull()!!
+            Config.enableGroups.remove(group.id)
+            Config.save()
+            sendMessage("关闭本群天气插件")
+        } else {
+            sendMessage("请在群聊环境下触发")
+        }
+    }
+
+    @SubCommand("status")
+    suspend fun CommandSender.status() {
+        val group: Group
+        if (getGroupOrNull() != null) {
+            group = getGroupOrNull()!!
+            if (group.id in Config.enableGroups) {
+                sendMessage("本群已开启天气插件")
+            } else {
+                sendMessage("本群未开启天气插件")
+            }
+        } else {
+            sendMessage("请在群聊环境下触发")
+        }
     }
 }

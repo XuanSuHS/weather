@@ -19,7 +19,7 @@ object weatherMain : KotlinPlugin(
     JvmPluginDescription(
         id = "top.xuansu.mirai.weather",
         name = "Weather",
-        version = "0.1.0",
+        version = "0.1.1",
     ) {
         author("XuanSu")
     }
@@ -29,9 +29,12 @@ object weatherMain : KotlinPlugin(
     lateinit var imageFolder: File
 
     override fun onEnable() {
+        //----------------------
         //初始化命令
         WeatherCommand().register()
-        ProxySetCommand().register()
+        ConfigureCommand().register()
+        //----------------------
+
 
         //初始化Config
         reloadPluginConfig(Config)
@@ -48,13 +51,21 @@ object weatherMain : KotlinPlugin(
         }
         imageFolderPath = imageFolder.path
 
+        //初始化下载图片
         CoroutineScope(Dispatchers.IO).launch {
             getWeatherPic()
         }
 
+        //监听文字寻找触发指令
         globalEventChannel().subscribeAlways<GroupMessageEvent> {
             Config.commands.forEachIndexed { _, cmd ->
                 if (message.content.startsWith(cmd)) {
+
+                    //如果本群未启用则退出
+                    if (group.id !in Config.enableGroups) {
+                        return@subscribeAlways
+                    }
+
                     // 上传图片
                     getWeatherPic()
                     delay(700)

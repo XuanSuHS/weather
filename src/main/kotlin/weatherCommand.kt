@@ -18,7 +18,7 @@ class WeatherCommand : SimpleCommand(
 ) {
     @Handler
     suspend fun CommandSender.handle() {
-        getWeatherPic()
+        Web.getWeather()
         delay(700)
         val group: Group
         val img: Image

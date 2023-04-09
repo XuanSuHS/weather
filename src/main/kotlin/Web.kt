@@ -19,99 +19,122 @@ import java.nio.file.Paths
 import java.nio.file.StandardCopyOption
 import java.util.concurrent.TimeUnit
 
-fun getWeatherPic() {
 
-    //
-    //  本部分为获取图片URL部分
-    //
-    val proxyAddress = Config.proxyAddress.split(":")[0]
-    val proxyPort = Config.proxyAddress.split(":")[1].toInt()
+object Web {
+    private val proxyAddress = Config.proxyAddress.split(":")[0]
+    private val proxyPort = Config.proxyAddress.split(":")[1].toInt()
 
-    //创建OkHttpClient
-    val client = OkHttpClient.Builder()
-        .connectTimeout(30, TimeUnit.SECONDS)
-        .readTimeout(60, TimeUnit.SECONDS)
-        .callTimeout(60, TimeUnit.SECONDS)
-        .proxy(Proxy(Proxy.Type.HTTP, InetSocketAddress(proxyAddress, proxyPort)))
-        .build()
-
-    //获取Cookie
-    val requestForCookie = Request.Builder()
-        .url("https://www.easterlywave.com/weather")
-        .addHeader("Connection", "keep-alive")
-        .addHeader("Referer", "https://www.easterlywave.com/weather/")
-        .get()
-        .build()
-    val responseForCookie = client.newCall(requestForCookie).execute()
-
-    // 设置Cookie值
-    val urlCookie = if (responseForCookie.header("Set-Cookie") != null)
-        (responseForCookie.header("Set-Cookie")!!)
-    else {
-        "null"
+    fun getWeather() {
+        val urlCookie = getCookie()
+        val url = getWeatherURL(urlCookie)
+        getWeatherPic(url)
     }
 
-    val urlCookieValue = urlCookie.split(";")[0].replace("csrftoken=", "")
+    //获取Cookie
+    private fun getCookie(): String {
 
-    //获取图片URL的文件地址部分
-    val mediaType = "application/json;charset=utf-8".toMediaTypeOrNull()
-    val requestBody = "{\"content\":\"59287\"}".toRequestBody(mediaType)
-    val requestForPicURL = Request.Builder()
-        .url("https://www.easterlywave.com/action/weather/plot")
-        .header("Cookie", urlCookie)
-        .addHeader("Content-Type", "application/json")
-        .addHeader("Connection", "keep-alive")
-        .addHeader("Referer", "https://www.easterlywave.com/weather/")
-        .addHeader("x-csrftoken", urlCookieValue)
-        .post(requestBody)
-        .build()
+        //创建OkHttpClient
+        val client = OkHttpClient.Builder()
+            .connectTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(60, TimeUnit.SECONDS)
+            .callTimeout(60, TimeUnit.SECONDS)
+            .proxy(Proxy(Proxy.Type.HTTP, InetSocketAddress(proxyAddress, proxyPort)))
+            .build()
 
-    //处理返回的JSON
-    val responseForPicURL = client.newCall(requestForPicURL).execute()
-    val responseSRC =
-        JsonParser.parseString(responseForPicURL.body?.string()).asJsonObject.get("src").toString().replace("\"", "")
-    val picURL = "https://www.easterlywave.com".plus(responseSRC)
+        //获取Cookie
+        val requestForCookie = Request.Builder()
+            .url("https://www.easterlywave.com/weather")
+            .addHeader("Connection", "keep-alive")
+            .addHeader("Referer", "https://www.easterlywave.com/weather/")
+            .get()
+            .build()
+        val responseForCookie = client.newCall(requestForCookie).execute()
 
-    //
-    // End of the Part
-    //
-
-    // -----------------------------------------------------------------------------------------
-
-    //
-    //   本部分为下载图片部分
-    //
-
-    //初始化文件获取相关变量
-    val file = File(imageFolderPath, imageName)
-    val path = Paths.get(file.path)
-    var inputStream: InputStream
-
-    //创建Request
-    val request = Request.Builder()
-        .url(picURL)
-        .addHeader("Connection", "keep-alive")
-        .build()
-
-    logger.info { "Downloading Image" }
-    client.newCall(request).enqueue(object : Callback {
-        //图片下载失败
-        override fun onFailure(call: Call, e: IOException) {
-            logger.info { "Download Error" }
+        // 设置Cookie值
+        val urlCookie = if (responseForCookie.header("Set-Cookie") != null)
+            (responseForCookie.header("Set-Cookie")!!)
+        else {
+            "null"
         }
+        return urlCookie
+    }
 
-        //图片下载成功
-        override fun onResponse(call: Call, response: Response) {
-            logger.info { "Download Successful" }
-            if (response.body?.byteStream() != null) {
-                inputStream = response.body!!.byteStream()
-                Files.copy(inputStream, path, StandardCopyOption.REPLACE_EXISTING)
-                inputStream.close()
+    //获取图片URL
+    private fun getWeatherURL(cookie: String): String {
+
+        //创建OkHttpClient
+        val client = OkHttpClient.Builder()
+            .connectTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(60, TimeUnit.SECONDS)
+            .callTimeout(60, TimeUnit.SECONDS)
+            .proxy(Proxy(Proxy.Type.HTTP, InetSocketAddress(proxyAddress, proxyPort)))
+            .build()
+
+        val urlCookieValue = cookie.split(";")[0].replace("csrftoken=", "")
+
+        //获取图片URL的文件地址部分
+        val mediaType = "application/json;charset=utf-8".toMediaTypeOrNull()
+        val requestBody = "{\"content\":\"59287\"}".toRequestBody(mediaType)
+        val requestForPicURL = Request.Builder()
+            .url("https://www.easterlywave.com/action/weather/plot")
+            .header("Cookie", cookie)
+            .addHeader("Content-Type", "application/json")
+            .addHeader("Connection", "keep-alive")
+            .addHeader("Referer", "https://www.easterlywave.com/weather/")
+            .addHeader("x-csrftoken", urlCookieValue)
+            .post(requestBody)
+            .build()
+
+        //处理返回的JSON
+        val responseForPicURL = client.newCall(requestForPicURL).execute()
+        val responseSRC =
+            JsonParser.parseString(responseForPicURL.body?.string()).asJsonObject.get("src").toString()
+                .replace("\"", "")
+        return "https://www.easterlywave.com".plus(responseSRC)
+    }
+
+    //获取图片
+    private fun getWeatherPic(url: String) {
+
+        //创建OkHttpClient
+        val client = OkHttpClient.Builder()
+            .connectTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(60, TimeUnit.SECONDS)
+            .callTimeout(60, TimeUnit.SECONDS)
+            .proxy(Proxy(Proxy.Type.HTTP, InetSocketAddress(proxyAddress, proxyPort)))
+            .build()
+
+        //初始化文件获取相关变量
+        val file = File(imageFolderPath, imageName)
+        val path = Paths.get(file.path)
+        var inputStream: InputStream
+
+        //创建Request
+        val request = Request.Builder()
+            .url(url)
+            .addHeader("Connection", "keep-alive")
+            .build()
+
+        logger.info { "Downloading Image" }
+        client.newCall(request).enqueue(object : Callback {
+            //图片下载失败
+            override fun onFailure(call: Call, e: IOException) {
+                logger.info { "Download Error" }
             }
-        }
-    })
-    //
-    //   End of the Part
-    //
-    return
+
+            //图片下载成功
+            override fun onResponse(call: Call, response: Response) {
+                logger.info { "Download Successful" }
+                if (response.body?.byteStream() != null) {
+                    inputStream = response.body!!.byteStream()
+                    Files.copy(inputStream, path, StandardCopyOption.REPLACE_EXISTING)
+                    inputStream.close()
+                }
+            }
+        })
+        //
+        //   End of the Part
+        //
+        return
+    }
 }

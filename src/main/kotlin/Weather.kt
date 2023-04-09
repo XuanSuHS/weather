@@ -53,7 +53,7 @@ object weatherMain : KotlinPlugin(
 
         //初始化下载图片
         CoroutineScope(Dispatchers.IO).launch {
-            getWeatherPic()
+            Web.getWeather()
         }
 
         //监听文字寻找触发指令
@@ -67,7 +67,7 @@ object weatherMain : KotlinPlugin(
                     }
 
                     // 上传图片
-                    getWeatherPic()
+                    Web.getWeather()
                     delay(700)
                     val img = imageFolder.resolve(imageName).uploadAsImage(group, "png")
                     group.sendMessage(img)

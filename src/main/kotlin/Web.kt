@@ -7,7 +7,6 @@ import okhttp3.*
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.RequestBody.Companion.toRequestBody
 import top.xuansu.mirai.weather.weatherMain.imageFolderPath
-import top.xuansu.mirai.weather.weatherMain.imageName
 import top.xuansu.mirai.weather.weatherMain.logger
 import java.io.File
 import java.io.IOException
@@ -32,14 +31,15 @@ object Web {
         .proxy(Proxy(Proxy.Type.HTTP, InetSocketAddress(proxyAddress, proxyPort)))
         .build()
 
-    fun getWeather() {
-        getCookie()
-        val url = getWeatherURL()
-        getWeatherPic(url)
+    fun getWeather(city: String) {
+        val cityNumber = getCityNumber(city).second
+        val url = getWeatherURL(cityNumber)
+        getWeatherPic(url, cityNumber)
+        return
     }
 
     //获取Cookie
-    private fun getCookie() {
+    fun getCookie() {
 
         //获取Cookie
         val requestForCookie = Request.Builder()
@@ -95,10 +95,10 @@ object Web {
     }
 
     //获取图片URL
-    private fun getWeatherURL(): String {
+    private fun getWeatherURL(cityNumber: Int): String {
         //获取图片URL的文件地址部分
         val mediaType = "application/json;charset=utf-8".toMediaTypeOrNull()
-        val requestBody = "{\"content\":\"59287\"}".toRequestBody(mediaType)
+        val requestBody = "{\"content\":\"$cityNumber\"}".toRequestBody(mediaType)
         val requestForPicURL = Request.Builder()
             .url("https://www.easterlywave.com/action/weather/plot")
             .header("Cookie", Data.webCookie)
@@ -118,9 +118,10 @@ object Web {
     }
 
     //获取图片
-    private fun getWeatherPic(url: String) {
+    private fun getWeatherPic(url: String, cityNumber: Int) {
 
         //初始化文件获取相关变量
+        val imageName = "$cityNumber.png"
         val file = File(imageFolderPath, imageName)
         val path = Paths.get(file.path)
         var inputStream: InputStream

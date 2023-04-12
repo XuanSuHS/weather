@@ -26,7 +26,6 @@ object weatherMain : KotlinPlugin(
     }
 ) {
     var imageFolderPath = ""
-    const val imageName = "WeatherImg.png"
     lateinit var imageFolder: File
 
     override fun onEnable() {
@@ -55,7 +54,7 @@ object weatherMain : KotlinPlugin(
 
         //初始化下载图片
         CoroutineScope(Dispatchers.IO).launch {
-            Web.getWeather()
+            Web.getCookie()
         }
 
         //监听文字寻找触发指令
@@ -69,10 +68,20 @@ object weatherMain : KotlinPlugin(
                     }
 
                     // 上传图片
-                    Web.getWeather()
-                    delay(700)
+                    val groupCity = Data.defaultCityPerGroup[group.id]
+                    //如果本组未设置城市则提示并退出
+                    if (groupCity == null) {
+                        group.sendMessage("请设置默认城市")
+                        return@forEachIndexed
+                    }
+
+                    val groupCityNumber = Web.getCityNumber(groupCity).second
+                    val imageName = "$groupCityNumber.png"
+                    Web.getWeather("default")
+                    delay(1500)
                     val img = imageFolder.resolve(imageName).uploadAsImage(group, "png")
                     group.sendMessage(img)
+                    return@forEachIndexed
                 }
             }
         }

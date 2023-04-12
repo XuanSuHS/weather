@@ -9,6 +9,7 @@ import net.mamoe.mirai.contact.Group
 import net.mamoe.mirai.message.data.Image
 import net.mamoe.mirai.utils.ExternalResource.Companion.uploadAsImage
 import top.xuansu.mirai.weather.weatherMain.imageFolder
+import top.xuansu.mirai.weather.weatherMain.reload
 import top.xuansu.mirai.weather.weatherMain.save
 
 class WeatherCommand : SimpleCommand(
@@ -140,9 +141,15 @@ class ConfigureCommand : CompositeCommand(
         }
     }
 
-    @SubCommand("dev")
-    suspend fun CommandSender.dev(city: String) {
-        val result = Web.getCityNumber(city)
-        sendMessage(result.first.toString() + "\n" + result.second.toString())
+    @SubCommand("resetcookie")
+    suspend fun CommandSender.resetcookie() {
+        Web.getCookie()
+        sendMessage("Cookie更新完毕")
+    }
+
+    @SubCommand("reload")
+    suspend fun CommandSender.configreload() {
+        Config.reload()
+        sendMessage("config重载成功")
     }
 }

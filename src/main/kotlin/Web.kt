@@ -24,6 +24,14 @@ object Web {
     private val proxyAddress = Config.proxyAddress.split(":")[0]
     private val proxyPort = Config.proxyAddress.split(":")[1].toInt()
 
+    //创建OkHttpClient
+    val client = OkHttpClient.Builder()
+        .connectTimeout(30, TimeUnit.SECONDS)
+        .readTimeout(60, TimeUnit.SECONDS)
+        .callTimeout(60, TimeUnit.SECONDS)
+        .proxy(Proxy(Proxy.Type.HTTP, InetSocketAddress(proxyAddress, proxyPort)))
+        .build()
+
     fun getWeather() {
         val urlCookie = getCookie()
         val url = getWeatherURL(urlCookie)
@@ -32,14 +40,6 @@ object Web {
 
     //获取Cookie
     private fun getCookie(): String {
-
-        //创建OkHttpClient
-        val client = OkHttpClient.Builder()
-            .connectTimeout(30, TimeUnit.SECONDS)
-            .readTimeout(60, TimeUnit.SECONDS)
-            .callTimeout(60, TimeUnit.SECONDS)
-            .proxy(Proxy(Proxy.Type.HTTP, InetSocketAddress(proxyAddress, proxyPort)))
-            .build()
 
         //获取Cookie
         val requestForCookie = Request.Builder()
@@ -61,14 +61,6 @@ object Web {
 
     //获取图片URL
     private fun getWeatherURL(cookie: String): String {
-
-        //创建OkHttpClient
-        val client = OkHttpClient.Builder()
-            .connectTimeout(30, TimeUnit.SECONDS)
-            .readTimeout(60, TimeUnit.SECONDS)
-            .callTimeout(60, TimeUnit.SECONDS)
-            .proxy(Proxy(Proxy.Type.HTTP, InetSocketAddress(proxyAddress, proxyPort)))
-            .build()
 
         val urlCookieValue = cookie.split(";")[0].replace("csrftoken=", "")
 
@@ -95,14 +87,6 @@ object Web {
 
     //获取图片
     private fun getWeatherPic(url: String) {
-
-        //创建OkHttpClient
-        val client = OkHttpClient.Builder()
-            .connectTimeout(30, TimeUnit.SECONDS)
-            .readTimeout(60, TimeUnit.SECONDS)
-            .callTimeout(60, TimeUnit.SECONDS)
-            .proxy(Proxy(Proxy.Type.HTTP, InetSocketAddress(proxyAddress, proxyPort)))
-            .build()
 
         //初始化文件获取相关变量
         val file = File(imageFolderPath, imageName)

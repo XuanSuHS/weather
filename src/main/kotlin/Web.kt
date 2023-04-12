@@ -33,13 +33,13 @@ object Web {
         .build()
 
     fun getWeather() {
-        val urlCookie = getCookie()
-        val url = getWeatherURL(urlCookie)
+        getCookie()
+        val url = getWeatherURL()
         getWeatherPic(url)
     }
 
     //获取Cookie
-    private fun getCookie(): String {
+    private fun getCookie() {
 
         //获取Cookie
         val requestForCookie = Request.Builder()
@@ -51,29 +51,61 @@ object Web {
         val responseForCookie = client.newCall(requestForCookie).execute()
 
         // 设置Cookie值
-        val urlCookie = if (responseForCookie.header("Set-Cookie") != null)
+        Data.webCookie = if (responseForCookie.header("Set-Cookie") != null)
             (responseForCookie.header("Set-Cookie")!!)
         else {
             "null"
         }
-        return urlCookie
+        Data.webCookieValue = Data.webCookie.split(";")[0].replace("csrftoken=", "")
+    }
+
+    //获取城市对应数字
+    fun getCityNumber(city: String): Pair<Int, Int> {
+        val mediaType = "application/json;charset=utf-8".toMediaTypeOrNull()
+        val requestBody = "{\"content\":\"$city\"}".toRequestBody(mediaType)
+        val requestForCityNumber = Request.Builder()
+            .url("https://www.easterlywave.com/action/weather/search")
+            .header("Cookie", Data.webCookie)
+            .addHeader("Content-Type", "application/json")
+            .addHeader("Connection", "keep-alive")
+            .addHeader("Referer", "https://www.easterlywave.com/weather/")
+            .addHeader("x-csrftoken", Data.webCookieValue)
+            .post(requestBody)
+            .build()
+        val responseForCityNumber = client.newCall(requestForCityNumber).execute()
+        val responseJSON = JsonParser.parseString(responseForCityNumber.body!!.string()).asJsonObject
+        var responseStatus = responseJSON.get("status").toString().toInt()
+        //如果找不到结果则直接返回错误代码1
+        if (responseStatus == 1) {
+            return Pair(1, 0)
+        }
+
+        //找到结果则分析结果
+        val suggestions = responseJSON.get("suggestions").asJsonArray
+        var cityNumber = suggestions.get(0).asJsonObject.get("data").toString().replace("\"", "").toInt()
+
+        //如果备选项不止一个则返回代码2以及备选项个数
+        if (suggestions.size() > 1) {
+            responseStatus = 2
+            cityNumber = suggestions.size()
+        }
+
+        //如果备选项只有一个则返回代码0以及城市对应WMO代号
+        return Pair(responseStatus, cityNumber)
     }
 
     //获取图片URL
-    private fun getWeatherURL(cookie: String): String {
-
-        val urlCookieValue = cookie.split(";")[0].replace("csrftoken=", "")
-
+    private fun getWeatherURL(): String {
         //获取图片URL的文件地址部分
         val mediaType = "application/json;charset=utf-8".toMediaTypeOrNull()
         val requestBody = "{\"content\":\"59287\"}".toRequestBody(mediaType)
         val requestForPicURL = Request.Builder()
             .url("https://www.easterlywave.com/action/weather/plot")
-            .header("Cookie", cookie)
+            .header("Cookie", Data.webCookie)
             .addHeader("Content-Type", "application/json")
             .addHeader("Connection", "keep-alive")
             .addHeader("Referer", "https://www.easterlywave.com/weather/")
-            .addHeader("x-csrftoken", urlCookieValue)
+            .addHeader("x-csrftoken", Data.webCookieValue)
             .post(requestBody)
             .build()
 

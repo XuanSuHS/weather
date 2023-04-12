@@ -8,6 +8,7 @@ import net.mamoe.mirai.console.command.CommandManager.INSTANCE.register
 import net.mamoe.mirai.console.plugin.jvm.JvmPluginDescription
 import net.mamoe.mirai.console.plugin.jvm.KotlinPlugin
 import net.mamoe.mirai.console.plugin.jvm.reloadPluginConfig
+import net.mamoe.mirai.console.plugin.jvm.reloadPluginData
 import net.mamoe.mirai.event.events.GroupMessageEvent
 import net.mamoe.mirai.event.globalEventChannel
 import net.mamoe.mirai.message.data.content
@@ -38,6 +39,7 @@ object weatherMain : KotlinPlugin(
 
         //初始化Config
         reloadPluginConfig(Config)
+        reloadPluginData(Data)
 
         //检查并创建图片储存文件夹
         imageFolder = dataFolder.resolve("img")

@@ -101,4 +101,10 @@ class ConfigureCommand : CompositeCommand(
             sendMessage("请在群聊环境下触发")
         }
     }
+
+    @SubCommand("dev")
+    suspend fun CommandSender.dev(city: String) {
+        val result = Web.getCityNumber(city)
+        sendMessage(result.first.toString() + "\n" + result.second.toString())
+    }
 }

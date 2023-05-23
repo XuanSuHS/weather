@@ -50,6 +50,30 @@ class WeatherCommand : SimpleCommand(
     }
 }
 
+class TyphoonCommand : SimpleCommand(
+    owner = weatherMain,
+    primaryName = "typhoon",
+    secondaryNames = arrayOf("台风")
+) {
+    @Handler
+    suspend fun CommandSender.handle() {
+        val group: Group
+        val img: Image
+        if (getGroupOrNull() != null) {
+            group = getGroupOrNull()!!
+            //如果本群未启用则退出
+            if (group.id !in Config.enableGroups) {
+                return
+            }
+
+            val imageName = Web.getTyphoon()
+            delay(1500)
+            img = imageFolder.resolve(imageName).uploadAsImage(group, "png")
+            group.sendMessage(img)
+        }
+    }
+}
+
 class ConfigureCommand : CompositeCommand(
     owner = weatherMain,
     primaryName = "wt"

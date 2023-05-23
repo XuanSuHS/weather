@@ -6,6 +6,7 @@ import net.mamoe.mirai.utils.info
 import okhttp3.*
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.RequestBody.Companion.toRequestBody
+import top.xuansu.mirai.weather.weatherMain.imageFolder
 import top.xuansu.mirai.weather.weatherMain.imageFolderPath
 import top.xuansu.mirai.weather.weatherMain.logger
 import java.io.File
@@ -20,26 +21,21 @@ import java.util.concurrent.TimeUnit
 
 
 object Web {
-    private val proxyAddress = Config.proxyAddress.split(":")[0]
-    private val proxyPort = Config.proxyAddress.split(":")[1].toInt()
-
-    //创建OkHttpClient
-    val client = OkHttpClient.Builder()
-        .connectTimeout(30, TimeUnit.SECONDS)
-        .readTimeout(60, TimeUnit.SECONDS)
-        .callTimeout(60, TimeUnit.SECONDS)
-        .proxy(Proxy(Proxy.Type.HTTP, InetSocketAddress(proxyAddress, proxyPort)))
-        .build()
-
-    fun getWeather(city: String) {
-        val cityNumber = getCityNumber(city).second
-        val url = getWeatherURL(cityNumber)
-        getWeatherPic(url, cityNumber)
-        return
-    }
 
     //获取Cookie
     fun getCookie() {
+
+        val client = OkHttpClient.Builder()
+            .connectTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(60, TimeUnit.SECONDS)
+            .callTimeout(60, TimeUnit.SECONDS)
+            .proxy(
+                Proxy(
+                    Proxy.Type.HTTP,
+                    InetSocketAddress(Config.proxyAddress.split(":")[0], Config.proxyAddress.split(":")[1].toInt())
+                )
+            )
+            .build()
 
         //获取Cookie
         val requestForCookie = Request.Builder()
@@ -59,8 +55,38 @@ object Web {
         Data.webCookieValue = Data.webCookie.split(";")[0].replace("csrftoken=", "")
     }
 
+    fun getWeather(city: String) {
+        val cityNumber = getCityNumber(city).second
+        val url = getWeatherURL(cityNumber)
+        val imageName = "$cityNumber.png"
+        getPic(url, imageName)
+        return
+    }
+
+    fun getTyphoon(): String {
+        val time = getTyphoonURL()
+        val url = "https://easterlywave.com/media/typhoon/ensemble/$time/wpac.png"
+        val imageName = "$time-wpac.png"
+        if (!imageFolder.resolve(imageName).exists()) {
+            getPic(url, imageName)
+        }
+        return imageName
+    }
+
     //获取城市对应数字
     fun getCityNumber(city: String): Pair<Int, Int> {
+        val client = OkHttpClient.Builder()
+            .connectTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(60, TimeUnit.SECONDS)
+            .callTimeout(60, TimeUnit.SECONDS)
+            .proxy(
+                Proxy(
+                    Proxy.Type.HTTP,
+                    InetSocketAddress(Config.proxyAddress.split(":")[0], Config.proxyAddress.split(":")[1].toInt())
+                )
+            )
+            .build()
+
         val mediaType = "application/json;charset=utf-8".toMediaTypeOrNull()
         val requestBody = "{\"content\":\"$city\"}".toRequestBody(mediaType)
         val requestForCityNumber = Request.Builder()
@@ -94,8 +120,20 @@ object Web {
         return Pair(responseStatus, cityNumber)
     }
 
-    //获取图片URL
+    //获取天气图片URL
     private fun getWeatherURL(cityNumber: Int): String {
+        val client = OkHttpClient.Builder()
+            .connectTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(60, TimeUnit.SECONDS)
+            .callTimeout(60, TimeUnit.SECONDS)
+            .proxy(
+                Proxy(
+                    Proxy.Type.HTTP,
+                    InetSocketAddress(Config.proxyAddress.split(":")[0], Config.proxyAddress.split(":")[1].toInt())
+                )
+            )
+            .build()
+
         //获取图片URL的文件地址部分
         val mediaType = "application/json;charset=utf-8".toMediaTypeOrNull()
         val requestBody = "{\"content\":\"$cityNumber\"}".toRequestBody(mediaType)
@@ -117,11 +155,57 @@ object Web {
         return "https://www.easterlywave.com".plus(responseSRC)
     }
 
+    //获取台风图片URL
+    private fun getTyphoonURL(): String {
+        val client = OkHttpClient.Builder()
+            .connectTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(60, TimeUnit.SECONDS)
+            .callTimeout(60, TimeUnit.SECONDS)
+            .proxy(
+                Proxy(
+                    Proxy.Type.HTTP,
+                    InetSocketAddress(Config.proxyAddress.split(":")[0], Config.proxyAddress.split(":")[1].toInt())
+                )
+            )
+            .build()
+
+        val mediaType = "application/json;charset=utf-8".toMediaTypeOrNull()
+        val requestBody = "".toRequestBody(mediaType)
+        val URLRequest = Request.Builder()
+            .url("https://www.easterlywave.com/action/typhoon/ecens")
+            .header("Cookie", Data.webCookie)
+            .addHeader("Content-Type", "application/json")
+            .addHeader("Connection", "keep-alive")
+            .addHeader("Referer", "https://www.easterlywave.com/typhoon/ensemble/")
+            .addHeader("x-csrftoken", Data.webCookieValue)
+            .post(requestBody)
+            .build()
+
+        val urlResponse = client.newCall(URLRequest).execute()
+        val time =
+            JsonParser.parseString(urlResponse.body?.string()).asJsonObject
+                .get("data").asJsonArray
+                .get(0).asJsonObject
+                .get("basetime").toString().replace("\"", "")
+        return time
+        //return urlResponse.body!!.string()
+    }
+
     //获取图片
-    private fun getWeatherPic(url: String, cityNumber: Int) {
+    private fun getPic(url: String, imageName: String) {
+        val client = OkHttpClient.Builder()
+            .connectTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(60, TimeUnit.SECONDS)
+            .callTimeout(60, TimeUnit.SECONDS)
+            .proxy(
+                Proxy(
+                    Proxy.Type.HTTP,
+                    InetSocketAddress(Config.proxyAddress.split(":")[0], Config.proxyAddress.split(":")[1].toInt())
+                )
+            )
+            .build()
 
         //初始化文件获取相关变量
-        val imageName = "$cityNumber.png"
         val file = File(imageFolderPath, imageName)
         val path = Paths.get(file.path)
         var inputStream: InputStream

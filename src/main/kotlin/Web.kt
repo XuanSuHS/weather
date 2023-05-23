@@ -152,7 +152,9 @@ object Web {
             if (urlErr == null) {
                 val url = "https://easterlywave.com/media/typhoon/ensemble/$time/wpac.png"
                 val imageName = "$time-wpac.png"
-                if (!imageFolder.resolve(imageName).exists()) {
+                if (imageFolder.resolve(imageName).exists()) {
+                    callback(imageName, null)
+                } else {
                     getPic(url, imageName) { picErr ->
                         if (picErr == null) {
                             callback(imageName, null)

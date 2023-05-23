@@ -55,7 +55,11 @@ object weatherMain : KotlinPlugin(
 
         //初始化下载图片
         CoroutineScope(Dispatchers.IO).launch {
-            Web.getCookie()
+            Web.getCookie() { err ->
+                if (err != null) {
+                    logger.info("获取Cookie时出错：$err")
+                }
+            }
         }
 
         //监听文字寻找触发指令

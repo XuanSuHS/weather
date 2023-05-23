@@ -6,6 +6,6 @@ import kotlinx.coroutines.launch
 
 fun reloadCookie() {
     CoroutineScope(Dispatchers.IO).launch {
-        Web.getCookie()
+        Web.getCookie {}
     }
 }

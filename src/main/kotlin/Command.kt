@@ -1,6 +1,7 @@
 package top.xuansu.mirai.weather
 
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.runBlocking
 import net.mamoe.mirai.console.command.CommandSender
 import net.mamoe.mirai.console.command.CompositeCommand
 import net.mamoe.mirai.console.command.SimpleCommand
@@ -58,18 +59,33 @@ class TyphoonCommand : SimpleCommand(
     @Handler
     suspend fun CommandSender.handle() {
         val group: Group
-        val img: Image
         if (getGroupOrNull() != null) {
             group = getGroupOrNull()!!
             //如果本群未启用则退出
             if (group.id !in Config.enableGroups) {
                 return
             }
-
-            val imageName = Web.getTyphoon()
-            delay(1500)
-            img = imageFolder.resolve(imageName).uploadAsImage(group, "png")
-            group.sendMessage(img)
+            Web.getTyphoon { imageName, err ->
+                if (err == null) {
+                    runBlocking {
+                        val img = imageFolder.resolve(imageName!!).uploadAsImage(group, "png")
+                        group.sendMessage(img)
+                    }
+                } else {
+                    runBlocking { sendMessage(err) }
+                }
+            }
+            //val webResponse = Web.getTyphoon()
+            //if (webResponse.first) {
+            //    val imageName = webResponse.second
+            //    delay(1500)
+            //    img = imageFolder.resolve(imageName).uploadAsImage(group, "png")
+            //    group.sendMessage(img)
+            //}
+            //else {
+            //    val message = "执行出错，错误代码为：" + webResponse.second
+            //    group.sendMessage(message)
+            //}
         }
     }
 }
@@ -90,17 +106,20 @@ class ConfigureCommand : CompositeCommand(
             return
         }
 
-        Config.proxyAddress = arg
-        Config.save()
+        //检查代理地址是否有效
+        Web.checkProxy(arg) { status ->
+            if (status) {
+                runBlocking { sendMessage("输入的地址为 $arg 代理有效") }
+                Config.proxyAddress = arg
+                Config.save()
+            } else {
+                runBlocking { sendMessage("代理地址无效，请检查输入是否有误") }
+            }
+        }
     }
 
-    @SubCommand("getproxy")
-    suspend fun CommandSender.getproxy() {
-        sendMessage("当前代理地址：" + Config.proxyAddress)
-    }
-
-    @SubCommand("enable")
-    suspend fun CommandSender.enable() {
+    @SubCommand("on")
+    suspend fun CommandSender.on() {
         val group: Group
         if (getGroupOrNull() != null) {
             group = getGroupOrNull()!!
@@ -112,8 +131,8 @@ class ConfigureCommand : CompositeCommand(
         }
     }
 
-    @SubCommand("disable")
-    suspend fun CommandSender.disable() {
+    @SubCommand("off")
+    suspend fun CommandSender.off() {
         val group: Group
         if (getGroupOrNull() != null) {
             group = getGroupOrNull()!!
@@ -126,7 +145,7 @@ class ConfigureCommand : CompositeCommand(
     }
 
     @SubCommand("default")
-    suspend fun CommandSender.setdefaultcity(city: String) {
+    suspend fun CommandSender.setDefaultCity(city: String) {
         if (getGroupOrNull() != null) {
             val groupid = getGroupOrNull()!!.id
             when (Web.getCityNumber(city).first) {
@@ -152,28 +171,47 @@ class ConfigureCommand : CompositeCommand(
 
     @SubCommand("status")
     suspend fun CommandSender.status() {
-        val group: Group
         if (getGroupOrNull() != null) {
-            group = getGroupOrNull()!!
+            val group = getGroupOrNull()!!
             if (group.id in Config.enableGroups) {
-                sendMessage("本群已开启天气插件\n本群默认城市为 " + Data.defaultCityPerGroup[group.id])
+                var message = "本群已启用天气插件\n当前代理地址：${Config.proxyAddress}\n"
+                message += if (Data.defaultCityPerGroup[group.id] != null) {
+                    "默认城市：${Data.defaultCityPerGroup[group.id]}"
+                } else {
+                    "默认城市未设置"
+                }
+                sendMessage(message)
             } else {
-                sendMessage("本群未开启天气插件")
+                sendMessage("本群未启用天气插件")
             }
-        } else {
-            sendMessage("请在群聊环境下触发")
         }
     }
 
-    @SubCommand("resetcookie")
-    suspend fun CommandSender.resetcookie() {
-        Web.getCookie()
-        sendMessage("Cookie更新完毕")
+    @SubCommand("resetCookie")
+    suspend fun CommandSender.resetCookie() {
+        Web.getCookie { err ->
+            if (err == null) {
+                runBlocking { sendMessage("Cookie更新完毕") }
+            } else {
+                runBlocking { sendMessage("Cookie更新时出错：$err") }
+            }
+        }
     }
 
     @SubCommand("reload")
-    suspend fun CommandSender.configreload() {
+    suspend fun CommandSender.configReload() {
         Config.reload()
-        sendMessage("config重载成功")
+        sendMessage("配置文件重载成功")
+    }
+
+    @SubCommand("dev")
+    suspend fun CommandSender.dev() {
+        Web.getTyphoon { time, err ->
+            if (err == null) {
+                runBlocking { sendMessage("执行成功，时间：$time") }
+            } else {
+                runBlocking { sendMessage(err) }
+            }
+        }
     }
 }

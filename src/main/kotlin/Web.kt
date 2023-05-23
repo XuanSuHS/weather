@@ -22,8 +22,42 @@ import java.util.concurrent.TimeUnit
 
 object Web {
 
+    //检查代理是否可用
+    fun checkProxy(proxyAdd: String, callback: (Boolean) -> Unit) {
+        val client = OkHttpClient.Builder()
+            .connectTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(60, TimeUnit.SECONDS)
+            .callTimeout(60, TimeUnit.SECONDS)
+            .proxy(
+                Proxy(
+                    Proxy.Type.HTTP,
+                    InetSocketAddress(proxyAdd.split(":")[0], proxyAdd.split(":")[1].toInt())
+                )
+            )
+            .build()
+
+        val request = Request.Builder()
+            .url("https://www.easterlywave.com/weather")
+            .addHeader("Connection", "keep-alive")
+            .addHeader("Referer", "https://www.easterlywave.com/weather/")
+            .get()
+            .build()
+
+        client.newCall(request).enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                // 请求失败时的回调
+                callback(false)
+            }
+
+            override fun onResponse(call: Call, response: Response) {
+                // 请求成功时的回调
+                callback(true)
+            }
+        })
+    }
+
     //获取Cookie
-    fun getCookie() {
+    fun getCookie(callback: (String?) -> Unit) {
 
         val client = OkHttpClient.Builder()
             .connectTimeout(30, TimeUnit.SECONDS)
@@ -38,39 +72,65 @@ object Web {
             .build()
 
         //获取Cookie
-        val requestForCookie = Request.Builder()
+        val request = Request.Builder()
             .url("https://www.easterlywave.com/weather")
             .addHeader("Connection", "keep-alive")
             .addHeader("Referer", "https://www.easterlywave.com/weather/")
             .get()
             .build()
-        val responseForCookie = client.newCall(requestForCookie).execute()
 
-        // 设置Cookie值
-        Data.webCookie = if (responseForCookie.header("Set-Cookie") != null)
-            (responseForCookie.header("Set-Cookie")!!)
-        else {
-            "null"
-        }
-        Data.webCookieValue = Data.webCookie.split(";")[0].replace("csrftoken=", "")
+        client.newCall(request).enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                // 请求失败时的回调
+                callback(e.message)
+            }
+
+            override fun onResponse(call: Call, response: Response) {
+                // 请求成功时的回调
+                response.use {
+                    if (response.isSuccessful) {
+                        //设置Cookie
+                        Data.webCookie = if (response.header("Set-Cookie") != null)
+                            (response.header("Set-Cookie")!!)
+                        else {
+                            "null"
+                        }
+                        Data.webCookieValue = Data.webCookie.split(";")[0].replace("csrftoken=", "")
+                        callback(null)
+                    } else {
+                        callback(response.code.toString())
+                    }
+                }
+            }
+        })
     }
 
     fun getWeather(city: String) {
         val cityNumber = getCityNumber(city).second
         val url = getWeatherURL(cityNumber)
         val imageName = "$cityNumber.png"
-        getPic(url, imageName)
+        getPic(url, imageName) {}
         return
     }
 
-    fun getTyphoon(): String {
-        val time = getTyphoonURL()
-        val url = "https://easterlywave.com/media/typhoon/ensemble/$time/wpac.png"
-        val imageName = "$time-wpac.png"
-        if (!imageFolder.resolve(imageName).exists()) {
-            getPic(url, imageName)
+    fun getTyphoon(callback: (String?, String?) -> Unit) {
+        getTyphoonURL { time, urlErr ->
+            if (urlErr == null) {
+                val url = "https://easterlywave.com/media/typhoon/ensemble/$time/wpac.png"
+                val imageName = "$time-wpac.png"
+                if (!imageFolder.resolve(imageName).exists()) {
+                    getPic(url, imageName) { picErr ->
+                        if (picErr == null) {
+                            callback(imageName, null)
+                        } else {
+                            callback(null, "下载图片时出错：$picErr")
+                        }
+                    }
+                }
+            } else {
+                callback(null, "获取URL时出错：$urlErr")
+            }
         }
-        return imageName
     }
 
     //获取城市对应数字
@@ -156,7 +216,12 @@ object Web {
     }
 
     //获取台风图片URL
-    private fun getTyphoonURL(): String {
+    //回调值第一个为成功时数据
+    //第二个是出错时错误代码
+    private fun getTyphoonURL(callback: (String?, String?) -> Unit) {
+        val proxyAdd = Config.proxyAddress.split(":")[0]
+        val proxyPort = Config.proxyAddress.split(":")[1].toInt()
+
         val client = OkHttpClient.Builder()
             .connectTimeout(30, TimeUnit.SECONDS)
             .readTimeout(60, TimeUnit.SECONDS)
@@ -164,14 +229,14 @@ object Web {
             .proxy(
                 Proxy(
                     Proxy.Type.HTTP,
-                    InetSocketAddress(Config.proxyAddress.split(":")[0], Config.proxyAddress.split(":")[1].toInt())
+                    InetSocketAddress(proxyAdd, proxyPort)
                 )
             )
             .build()
 
         val mediaType = "application/json;charset=utf-8".toMediaTypeOrNull()
         val requestBody = "".toRequestBody(mediaType)
-        val URLRequest = Request.Builder()
+        val request = Request.Builder()
             .url("https://www.easterlywave.com/action/typhoon/ecens")
             .header("Cookie", Data.webCookie)
             .addHeader("Content-Type", "application/json")
@@ -181,18 +246,34 @@ object Web {
             .post(requestBody)
             .build()
 
-        val urlResponse = client.newCall(URLRequest).execute()
-        val time =
-            JsonParser.parseString(urlResponse.body?.string()).asJsonObject
-                .get("data").asJsonArray
-                .get(0).asJsonObject
-                .get("basetime").toString().replace("\"", "")
-        return time
-        //return urlResponse.body!!.string()
+        client.newCall(request).enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                // 请求失败时的回调
+                callback(null, e.message)
+            }
+
+            override fun onResponse(call: Call, response: Response) {
+                // 请求成功时的回调
+                response.use {
+                    if (response.isSuccessful) {
+                        val time =
+                            JsonParser.parseString(response.body!!.string()).asJsonObject
+                                .get("data").asJsonArray
+                                .get(0).asJsonObject
+                                .get("basetime").toString().replace("\"", "")
+                        callback(time, null)
+                    } else {
+                        callback(null, response.code.toString())
+                    }
+                }
+            }
+        })
     }
 
     //获取图片
-    private fun getPic(url: String, imageName: String) {
+    private fun getPic(url: String, imageName: String, callback: (String?) -> Unit) {
+        val proxyAdd = Config.proxyAddress.split(":")[0]
+        val proxyPort = Config.proxyAddress.split(":")[1].toInt()
         val client = OkHttpClient.Builder()
             .connectTimeout(30, TimeUnit.SECONDS)
             .readTimeout(60, TimeUnit.SECONDS)
@@ -200,7 +281,7 @@ object Web {
             .proxy(
                 Proxy(
                     Proxy.Type.HTTP,
-                    InetSocketAddress(Config.proxyAddress.split(":")[0], Config.proxyAddress.split(":")[1].toInt())
+                    InetSocketAddress(proxyAdd, proxyPort)
                 )
             )
             .build()
@@ -220,22 +301,23 @@ object Web {
         client.newCall(request).enqueue(object : Callback {
             //图片下载失败
             override fun onFailure(call: Call, e: IOException) {
-                logger.info { "Download Error" }
+                callback(e.message)
             }
 
             //图片下载成功
             override fun onResponse(call: Call, response: Response) {
-                logger.info { "Download Successful" }
-                if (response.body?.byteStream() != null) {
+                if (response.isSuccessful && response.body?.byteStream() != null) {
                     inputStream = response.body!!.byteStream()
                     Files.copy(inputStream, path, StandardCopyOption.REPLACE_EXISTING)
                     inputStream.close()
+                    callback(null)
+                } else if (response.body?.byteStream() == null) {
+                    callback("返回内容为空")
                 }
             }
         })
         //
         //   End of the Part
         //
-        return
     }
 }

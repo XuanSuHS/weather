@@ -94,26 +94,48 @@ class ConfigureCommand : CompositeCommand(
     owner = weatherMain,
     primaryName = "wt"
 ) {
-    @SubCommand("setproxy")
-    suspend fun CommandSender.setproxy(arg: String) {
+    @SubCommand("proxy")
+    suspend fun CommandSender.setproxy(arg: String, address: String = "") {
+        when (arg) {
+            "on" -> {
+                Web.checkProxy(Config.proxyAddress) { status ->
+                    if (status) {
+                        runBlocking { sendMessage("代理地址：${Config.proxyAddress}\n测试通过，代理开启") }
+                        Web.enableProxy()
+                    } else {
+                        runBlocking {
+                            sendMessage(
+                                "代理地址：${Config.proxyAddress}\n" + "测试不通过，请检查"
+                            )
+                        }
+                    }
+                }
+            }
 
-        //分离地址与端口
-        val port = arg.split(":")[1].toInt()
+            "off" -> {
+                Web.disableProxy()
+                sendMessage("关闭代理访问")
+            }
 
-        //检查端口是否合法
-        if (port < 1 || port > 65535) {
-            sendMessage("请输入正确的端口")
-            return
-        }
-
-        //检查代理地址是否有效
-        Web.checkProxy(arg) { status ->
-            if (status) {
-                runBlocking { sendMessage("输入的地址为 $arg 代理有效") }
-                Config.proxyAddress = arg
-                Config.save()
-            } else {
-                runBlocking { sendMessage("代理地址无效，请检查输入是否有误") }
+            "set" -> {
+                if (address == "") {
+                    sendMessage("请输入正确的代理地址")
+                    return
+                }
+                val port = address.split(":")[1].toInt()
+                if (port < 1 || port > 65535) {
+                    sendMessage("请输入正确的代理地址")
+                    return
+                }
+                Web.checkProxy(address) { status ->
+                    if (status) {
+                        runBlocking { sendMessage("输入的地址为 $address 代理有效") }
+                        Config.proxyAddress = address
+                        Config.save()
+                    } else {
+                        runBlocking { sendMessage("代理地址无效，请检查输入是否有误") }
+                    }
+                }
             }
         }
     }
@@ -174,7 +196,14 @@ class ConfigureCommand : CompositeCommand(
         if (getGroupOrNull() != null) {
             val group = getGroupOrNull()!!
             if (group.id in Config.enableGroups) {
-                var message = "本群已启用天气插件\n当前代理地址：${Config.proxyAddress}\n"
+                var message = "本群已启用天气插件\n"
+
+                message += if (Config.isProxyEnabled) {
+                    "当前代理地址：${Config.proxyAddress}\n"
+                } else {
+                    "代理未启用\n"
+                }
+
                 message += if (Data.defaultCityPerGroup[group.id] != null) {
                     "默认城市：${Data.defaultCityPerGroup[group.id]}"
                 } else {

@@ -21,10 +21,56 @@ import java.util.concurrent.TimeUnit
 
 
 object Web {
+    private var client = if (Config.isProxyEnabled) {
+        val proxyAdd = Config.proxyAddress.split(":")[0]
+        val proxyPort = Config.proxyAddress.split(":")[1].toInt()
+        OkHttpClient.Builder()
+            .connectTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(60, TimeUnit.SECONDS)
+            .callTimeout(60, TimeUnit.SECONDS)
+            .proxy(
+                Proxy(
+                    Proxy.Type.HTTP,
+                    InetSocketAddress(proxyAdd, proxyPort)
+                )
+            )
+            .build()
+    } else {
+        OkHttpClient.Builder()
+            .connectTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(60, TimeUnit.SECONDS)
+            .callTimeout(60, TimeUnit.SECONDS)
+            .build()
+    }
+
+    fun enableProxy() {
+        val proxyAdd = Config.proxyAddress.split(":")[0]
+        val proxyPort = Config.proxyAddress.split(":")[1].toInt()
+        client = OkHttpClient.Builder()
+            .connectTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(60, TimeUnit.SECONDS)
+            .callTimeout(60, TimeUnit.SECONDS)
+            .proxy(
+                Proxy(
+                    Proxy.Type.HTTP,
+                    InetSocketAddress(proxyAdd, proxyPort)
+                )
+            )
+            .build()
+    }
+
+    fun disableProxy() {
+        client = OkHttpClient.Builder()
+            .connectTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(60, TimeUnit.SECONDS)
+            .callTimeout(60, TimeUnit.SECONDS)
+            .build()
+    }
 
     //检查代理是否可用
     fun checkProxy(proxyAdd: String, callback: (Boolean) -> Unit) {
-        val client = OkHttpClient.Builder()
+
+        val proxyClient = OkHttpClient.Builder()
             .connectTimeout(30, TimeUnit.SECONDS)
             .readTimeout(60, TimeUnit.SECONDS)
             .callTimeout(60, TimeUnit.SECONDS)
@@ -43,7 +89,7 @@ object Web {
             .get()
             .build()
 
-        client.newCall(request).enqueue(object : Callback {
+        proxyClient.newCall(request).enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {
                 // 请求失败时的回调
                 callback(false)
@@ -58,18 +104,6 @@ object Web {
 
     //获取Cookie
     fun getCookie(callback: (String?) -> Unit) {
-
-        val client = OkHttpClient.Builder()
-            .connectTimeout(30, TimeUnit.SECONDS)
-            .readTimeout(60, TimeUnit.SECONDS)
-            .callTimeout(60, TimeUnit.SECONDS)
-            .proxy(
-                Proxy(
-                    Proxy.Type.HTTP,
-                    InetSocketAddress(Config.proxyAddress.split(":")[0], Config.proxyAddress.split(":")[1].toInt())
-                )
-            )
-            .build()
 
         //获取Cookie
         val request = Request.Builder()
@@ -135,17 +169,6 @@ object Web {
 
     //获取城市对应数字
     fun getCityNumber(city: String): Pair<Int, Int> {
-        val client = OkHttpClient.Builder()
-            .connectTimeout(30, TimeUnit.SECONDS)
-            .readTimeout(60, TimeUnit.SECONDS)
-            .callTimeout(60, TimeUnit.SECONDS)
-            .proxy(
-                Proxy(
-                    Proxy.Type.HTTP,
-                    InetSocketAddress(Config.proxyAddress.split(":")[0], Config.proxyAddress.split(":")[1].toInt())
-                )
-            )
-            .build()
 
         val mediaType = "application/json;charset=utf-8".toMediaTypeOrNull()
         val requestBody = "{\"content\":\"$city\"}".toRequestBody(mediaType)
@@ -182,17 +205,6 @@ object Web {
 
     //获取天气图片URL
     private fun getWeatherURL(cityNumber: Int): String {
-        val client = OkHttpClient.Builder()
-            .connectTimeout(30, TimeUnit.SECONDS)
-            .readTimeout(60, TimeUnit.SECONDS)
-            .callTimeout(60, TimeUnit.SECONDS)
-            .proxy(
-                Proxy(
-                    Proxy.Type.HTTP,
-                    InetSocketAddress(Config.proxyAddress.split(":")[0], Config.proxyAddress.split(":")[1].toInt())
-                )
-            )
-            .build()
 
         //获取图片URL的文件地址部分
         val mediaType = "application/json;charset=utf-8".toMediaTypeOrNull()
@@ -219,20 +231,6 @@ object Web {
     //回调值第一个为成功时数据
     //第二个是出错时错误代码
     private fun getTyphoonURL(callback: (String?, String?) -> Unit) {
-        val proxyAdd = Config.proxyAddress.split(":")[0]
-        val proxyPort = Config.proxyAddress.split(":")[1].toInt()
-
-        val client = OkHttpClient.Builder()
-            .connectTimeout(30, TimeUnit.SECONDS)
-            .readTimeout(60, TimeUnit.SECONDS)
-            .callTimeout(60, TimeUnit.SECONDS)
-            .proxy(
-                Proxy(
-                    Proxy.Type.HTTP,
-                    InetSocketAddress(proxyAdd, proxyPort)
-                )
-            )
-            .build()
 
         val mediaType = "application/json;charset=utf-8".toMediaTypeOrNull()
         val requestBody = "".toRequestBody(mediaType)
@@ -272,19 +270,6 @@ object Web {
 
     //获取图片
     private fun getPic(url: String, imageName: String, callback: (String?) -> Unit) {
-        val proxyAdd = Config.proxyAddress.split(":")[0]
-        val proxyPort = Config.proxyAddress.split(":")[1].toInt()
-        val client = OkHttpClient.Builder()
-            .connectTimeout(30, TimeUnit.SECONDS)
-            .readTimeout(60, TimeUnit.SECONDS)
-            .callTimeout(60, TimeUnit.SECONDS)
-            .proxy(
-                Proxy(
-                    Proxy.Type.HTTP,
-                    InetSocketAddress(proxyAdd, proxyPort)
-                )
-            )
-            .build()
 
         //初始化文件获取相关变量
         val file = File(imageFolderPath, imageName)

@@ -25,9 +25,9 @@ object Web {
         val proxyAdd = Config.proxyAddress.split(":")[0]
         val proxyPort = Config.proxyAddress.split(":")[1].toInt()
         OkHttpClient.Builder()
-            .connectTimeout(30, TimeUnit.SECONDS)
-            .readTimeout(60, TimeUnit.SECONDS)
-            .callTimeout(60, TimeUnit.SECONDS)
+            .connectTimeout(15, TimeUnit.SECONDS)
+            .readTimeout(15, TimeUnit.SECONDS)
+            .callTimeout(15, TimeUnit.SECONDS)
             .proxy(
                 Proxy(
                     Proxy.Type.HTTP,
@@ -37,9 +37,9 @@ object Web {
             .build()
     } else {
         OkHttpClient.Builder()
-            .connectTimeout(30, TimeUnit.SECONDS)
-            .readTimeout(60, TimeUnit.SECONDS)
-            .callTimeout(60, TimeUnit.SECONDS)
+            .connectTimeout(15, TimeUnit.SECONDS)
+            .readTimeout(15, TimeUnit.SECONDS)
+            .callTimeout(15, TimeUnit.SECONDS)
             .build()
     }
 
@@ -47,9 +47,9 @@ object Web {
         val proxyAdd = Config.proxyAddress.split(":")[0]
         val proxyPort = Config.proxyAddress.split(":")[1].toInt()
         client = OkHttpClient.Builder()
-            .connectTimeout(30, TimeUnit.SECONDS)
-            .readTimeout(60, TimeUnit.SECONDS)
-            .callTimeout(60, TimeUnit.SECONDS)
+            .connectTimeout(15, TimeUnit.SECONDS)
+            .readTimeout(15, TimeUnit.SECONDS)
+            .callTimeout(15, TimeUnit.SECONDS)
             .proxy(
                 Proxy(
                     Proxy.Type.HTTP,
@@ -61,9 +61,9 @@ object Web {
 
     fun disableProxy() {
         client = OkHttpClient.Builder()
-            .connectTimeout(30, TimeUnit.SECONDS)
-            .readTimeout(60, TimeUnit.SECONDS)
-            .callTimeout(60, TimeUnit.SECONDS)
+            .connectTimeout(15, TimeUnit.SECONDS)
+            .readTimeout(15, TimeUnit.SECONDS)
+            .callTimeout(15, TimeUnit.SECONDS)
             .build()
     }
 
@@ -71,9 +71,9 @@ object Web {
     fun checkProxy(proxyAdd: String, callback: (Boolean) -> Unit) {
 
         val proxyClient = OkHttpClient.Builder()
-            .connectTimeout(30, TimeUnit.SECONDS)
-            .readTimeout(60, TimeUnit.SECONDS)
-            .callTimeout(60, TimeUnit.SECONDS)
+            .connectTimeout(15, TimeUnit.SECONDS)
+            .readTimeout(15, TimeUnit.SECONDS)
+            .callTimeout(15, TimeUnit.SECONDS)
             .proxy(
                 Proxy(
                     Proxy.Type.HTTP,

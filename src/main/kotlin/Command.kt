@@ -108,6 +108,8 @@ class ConfigureCommand : CompositeCommand(
                     if (status) {
                         runBlocking { sendMessage("代理地址：${Config.proxyAddress}\n测试通过，代理开启") }
                         Web.ProxyFunc.enableProxy()
+                        Config.isProxyEnabled = true
+                        Config.save()
                     } else {
                         runBlocking {
                             sendMessage(
@@ -120,6 +122,8 @@ class ConfigureCommand : CompositeCommand(
 
             "off" -> {
                 Web.ProxyFunc.disableProxy()
+                Config.isProxyEnabled = false
+                Config.save()
                 sendMessage("关闭代理访问")
             }
 
@@ -247,12 +251,12 @@ class ConfigureCommand : CompositeCommand(
     }
 
     @SubCommand("dev")
-    suspend fun CommandSender.dev(city: String) {
-        Web.CityWeatherFunc.getWeather(city) { err, imageName ->
+    suspend fun CommandSender.dev() {
+        Web.SSTFunc.getSSTURL() { time, err ->
             if (err != null) {
-                runBlocking { sendMessage(err) }
+                runBlocking { sendMessage("Time:$time") }
             } else {
-                runBlocking { sendMessage("Finished, imageName:$imageName") }
+                runBlocking { sendMessage("Err:$err") }
             }
         }
     }

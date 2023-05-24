@@ -1,13 +1,11 @@
 package top.xuansu.mirai.weather
 
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import net.mamoe.mirai.console.command.CommandSender
 import net.mamoe.mirai.console.command.CompositeCommand
 import net.mamoe.mirai.console.command.SimpleCommand
 import net.mamoe.mirai.console.command.getGroupOrNull
 import net.mamoe.mirai.contact.Group
-import net.mamoe.mirai.message.data.Image
 import net.mamoe.mirai.utils.ExternalResource.Companion.uploadAsImage
 import top.xuansu.mirai.weather.weatherMain.imageFolder
 import top.xuansu.mirai.weather.weatherMain.reload
@@ -21,32 +19,23 @@ class WeatherCommand : SimpleCommand(
     @Handler
     suspend fun CommandSender.handle(city: String) {
         val group: Group
-        val img: Image
         if (getGroupOrNull() != null) {
             group = getGroupOrNull()!!
             //如果本群未启用则退出
             if (group.id !in Config.enableGroups) {
                 return
             }
-            val cityPair = Web.getCityNumber(city)
-            //判断城市输入是否有误
-            when (cityPair.first) {
-                1 -> {
-                    sendMessage("未找到该城市，请检查输入是否有误")
-                    return
-                }
 
-                2 -> {
-                    sendMessage("选项过多，请输入更精确的值")
-                    return
+            Web.getWeather(city) { err, imageName ->
+                if (err != null) {
+                    runBlocking { group.sendMessage(err) }
+                } else {
+                    runBlocking {
+                        val img = imageFolder.resolve(imageName).uploadAsImage(group, "png")
+                        group.sendMessage(img)
+                    }
                 }
             }
-
-            Web.getWeather(city)
-            val imageName = cityPair.second.toString() + ".png"
-            delay(1500)
-            img = imageFolder.resolve(imageName).uploadAsImage(group, "png")
-            group.sendMessage(img)
         }
     }
 }
@@ -75,17 +64,6 @@ class TyphoonCommand : SimpleCommand(
                     runBlocking { sendMessage(err) }
                 }
             }
-            //val webResponse = Web.getTyphoon()
-            //if (webResponse.first) {
-            //    val imageName = webResponse.second
-            //    delay(1500)
-            //    img = imageFolder.resolve(imageName).uploadAsImage(group, "png")
-            //    group.sendMessage(img)
-            //}
-            //else {
-            //    val message = "执行出错，错误代码为：" + webResponse.second
-            //    group.sendMessage(message)
-            //}
         }
     }
 }
@@ -169,23 +147,14 @@ class ConfigureCommand : CompositeCommand(
     @SubCommand("default")
     suspend fun CommandSender.setDefaultCity(city: String) {
         if (getGroupOrNull() != null) {
-            val groupid = getGroupOrNull()!!.id
-            when (Web.getCityNumber(city).first) {
-                0 -> {
-                    Data.defaultCityPerGroup[groupid] = city
-                    Data.save()
-                    sendMessage("已将群" + groupid + "的默认城市更改为" + city)
-                }
-
-                1 -> {
-                    sendMessage("未找到该城市，请检查输入是否有误")
-                }
-
-                2 -> {
-                    sendMessage("选项过多，请输入更精确的值")
+            val groupID = getGroupOrNull()!!.id
+            Web.getCityNumber(city) { isSuccessful, data ->
+                if (isSuccessful) {
+                    runBlocking { sendMessage("已将群" + groupID + "的默认城市更改为" + city) }
+                } else {
+                    runBlocking { sendMessage("出错了：$data") }
                 }
             }
-
         } else {
             sendMessage("请在群聊环境下触发")
         }
@@ -234,12 +203,12 @@ class ConfigureCommand : CompositeCommand(
     }
 
     @SubCommand("dev")
-    suspend fun CommandSender.dev() {
-        Web.getTyphoon { time, err ->
-            if (err == null) {
-                runBlocking { sendMessage("执行成功，时间：$time") }
-            } else {
+    suspend fun CommandSender.dev(city: String) {
+        Web.getWeather(city) { err, imageName ->
+            if (err != null) {
                 runBlocking { sendMessage(err) }
+            } else {
+                runBlocking { sendMessage("Finished, imageName:$imageName") }
             }
         }
     }

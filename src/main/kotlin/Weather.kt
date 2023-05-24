@@ -81,7 +81,7 @@ object weatherMain : KotlinPlugin(
                         return@forEachIndexed
                     }
 
-                    Web.getWeather(groupCity) { err, imageName ->
+                    Web.CityWeatherFunc.getWeather(groupCity) { err, imageName ->
                         if (err != null) {
                             runBlocking { group.sendMessage(err) }
                         } else {

@@ -43,6 +43,7 @@ object Web {
             .build()
     }
 
+    //代理相关函数
     object ProxyFunc {
         fun enableProxy() {
             val proxyAdd = Config.proxyAddress.split(":")[0]
@@ -146,6 +147,45 @@ object Web {
         })
     }
 
+    //获取图片
+    private fun getPic(url: String, imageName: String, callback: (String?) -> Unit) {
+
+        //初始化文件获取相关变量
+        val file = File(imageFolderPath, imageName)
+        val path = Paths.get(file.path)
+        var inputStream: InputStream
+
+        //创建Request
+        val request = Request.Builder()
+            .url(url)
+            .addHeader("Connection", "keep-alive")
+            .build()
+
+        client.newCall(request).enqueue(object : Callback {
+            //图片下载失败
+            override fun onFailure(call: Call, e: IOException) {
+                callback(e.message)
+            }
+
+            //图片下载成功
+            override fun onResponse(call: Call, response: Response) {
+                if (response.isSuccessful) {
+                    if (response.body?.byteStream() != null) {
+                        inputStream = response.body!!.byteStream()
+                        Files.copy(inputStream, path, StandardCopyOption.REPLACE_EXISTING)
+                        inputStream.close()
+                        callback(null)
+                    } else {
+                        callback("返回内容为空")
+                    }
+                } else {
+                    callback(response.code.toString())
+                }
+            }
+        })
+    }
+
+    //天气相关函数
     object CityWeatherFunc {
         //获取城市WMO代号
         //搜索成功时返回true与城市代号
@@ -299,6 +339,8 @@ object Web {
         }
     }
 
+
+    //台风相关函数
     object TyphoonFunc {
         fun getTyphoon(callback: (String?, String?) -> Unit) {
             getTyphoonURL { time, urlErr ->
@@ -376,37 +418,79 @@ object Web {
         }
     }
 
-    //获取图片
-    private fun getPic(url: String, imageName: String, callback: (String?) -> Unit) {
+    //海温相关函数
+    object SSTFunc {
 
-        //初始化文件获取相关变量
-        val file = File(imageFolderPath, imageName)
-        val path = Paths.get(file.path)
-        var inputStream: InputStream
-
-        //创建Request
-        val request = Request.Builder()
-            .url(url)
-            .addHeader("Connection", "keep-alive")
-            .build()
-
-        client.newCall(request).enqueue(object : Callback {
-            //图片下载失败
-            override fun onFailure(call: Call, e: IOException) {
-                callback(e.message)
-            }
-
-            //图片下载成功
-            override fun onResponse(call: Call, response: Response) {
-                if (response.isSuccessful && response.body?.byteStream() != null) {
-                    inputStream = response.body!!.byteStream()
-                    Files.copy(inputStream, path, StandardCopyOption.REPLACE_EXISTING)
-                    inputStream.close()
-                    callback(null)
-                } else if (response.body?.byteStream() == null) {
-                    callback("返回内容为空")
+        fun getSST(area: String = "wpac", callback: (String?, String?) -> Unit) {
+            getSSTURL { time, urlErr ->
+                if (urlErr == null) {
+                    //图片URL获取成功
+                    //根据URL信息获取图片文件
+                    val url = "https://www.easterlywave.com/media/typhoon/sst/$time/$area.png"
+                    val imageName = "$time-$area.png"
+                    if (imageFolder.resolve(imageName).exists()) {
+                        callback(imageName, null)
+                        return@getSSTURL
+                    } else {
+                        getPic(url, imageName) { picErr ->
+                            if (picErr == null) {
+                                //图片文件获取成功
+                                //返回图片信息供上传
+                                callback(imageName, null)
+                                return@getPic
+                            } else {
+                                //图片文件获取失败
+                                //返回错误信息
+                                callback(null, "下载图片时出错：$picErr")
+                                return@getPic
+                            }
+                        }
+                    }
+                } else {
+                    //图片URL获取失败
+                    //返回错误信息
+                    callback(null, "获取URL时出错：$urlErr")
+                    return@getSSTURL
                 }
             }
-        })
+        }
+
+        private fun getSSTURL(callback: (String, String?) -> Unit) {
+
+            val mediaType = "application/json;charset=utf-8".toMediaTypeOrNull()
+            val requestBody = "".toRequestBody(mediaType)
+            val request = Request.Builder()
+                .url("https://www.easterlywave.com/action/typhoon/sst")
+                .header("Cookie", Data.webCookie)
+                .addHeader("Content-Type", "application/json")
+                .addHeader("Connection", "keep-alive")
+                .addHeader("Referer", "https://www.easterlywave.com/typhoon/sst/")
+                .addHeader("x-csrftoken", Data.webCookieValue)
+                .post(requestBody)
+                .build()
+
+            client.newCall(request).enqueue(object : Callback {
+                override fun onFailure(call: Call, e: IOException) {
+                    // 请求失败时的回调
+                    callback("", e.message)
+                }
+
+                override fun onResponse(call: Call, response: Response) {
+                    // 请求成功时的回调
+                    response.use {
+                        if (response.isSuccessful) {
+                            val body = response.body!!.string()
+                            val times =
+                                JsonParser.parseString(body).asJsonObject
+                                    .get("times").asJsonArray
+                                    .get(0).toString().replace("\"", "")
+                            callback(times, null)
+                        } else {
+                            callback("", response.code.toString())
+                        }
+                    }
+                }
+            })
+        }
     }
 }

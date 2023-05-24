@@ -251,10 +251,10 @@ class ConfigureCommand : CompositeCommand(
     }
 
     @SubCommand("dev")
-    suspend fun CommandSender.dev() {
-        Web.SSTFunc.getSSTURL() { time, err ->
-            if (err != null) {
-                runBlocking { sendMessage("Time:$time") }
+    suspend fun CommandSender.dev(area: String) {
+        Web.SSTFunc.getSST(area) { image, err ->
+            if (err == null) {
+                runBlocking { sendMessage("image:$image") }
             } else {
                 runBlocking { sendMessage("Err:$err") }
             }

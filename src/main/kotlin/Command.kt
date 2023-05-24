@@ -68,6 +68,34 @@ class TyphoonCommand : SimpleCommand(
     }
 }
 
+class SeaSurfaceTempCommand : SimpleCommand(
+    owner = weatherMain,
+    primaryName = "sst",
+    secondaryNames = arrayOf("海温")
+) {
+    @Handler
+    suspend fun CommandSender.handle() {
+        val group: Group
+        if (getGroupOrNull() != null) {
+            group = getGroupOrNull()!!
+            //如果本群未启用则退出
+            if (group.id !in Config.enableGroups) {
+                return
+            }
+            Web.getTyphoon { imageName, err ->
+                if (err == null) {
+                    runBlocking {
+                        val img = imageFolder.resolve(imageName!!).uploadAsImage(group, "png")
+                        group.sendMessage(img)
+                    }
+                } else {
+                    runBlocking { sendMessage(err) }
+                }
+            }
+        }
+    }
+}
+
 class ConfigureCommand : CompositeCommand(
     owner = weatherMain,
     primaryName = "wt"
@@ -144,13 +172,29 @@ class ConfigureCommand : CompositeCommand(
         }
     }
 
-    @SubCommand("default")
-    suspend fun CommandSender.setDefaultCity(city: String) {
+    @SubCommand("city")
+    suspend fun CommandSender.setDefaultCity(arg: String) {
         if (getGroupOrNull() != null) {
             val groupID = getGroupOrNull()!!.id
-            Web.getCityNumber(city) { isSuccessful, data ->
+            Web.getCityNumber(arg) { isSuccessful, data ->
                 if (isSuccessful) {
-                    runBlocking { sendMessage("已将群" + groupID + "的默认城市更改为" + city) }
+                    runBlocking { sendMessage("已将群" + groupID + "的默认城市更改为" + arg) }
+                } else {
+                    runBlocking { sendMessage("出错了：$data") }
+                }
+            }
+        } else {
+            sendMessage("请在群聊环境下触发")
+        }
+    }
+
+    @SubCommand("sea")
+    suspend fun CommandSender.setDefaultSea(arg: String) {
+        if (getGroupOrNull() != null) {
+            val groupID = getGroupOrNull()!!.id
+            Web.getCityNumber(arg) { isSuccessful, data ->
+                if (isSuccessful) {
+                    runBlocking { sendMessage("已将群" + groupID + "的默认城市更改为" + arg) }
                 } else {
                     runBlocking { sendMessage("出错了：$data") }
                 }

@@ -350,7 +350,6 @@ object Web {
             override fun onFailure(call: Call, e: IOException) {
                 // 请求失败时的回调
                 callback(null, e.message)
-                return
             }
 
             override fun onResponse(call: Call, response: Response) {
@@ -363,10 +362,8 @@ object Web {
                                 .get(0).asJsonObject
                                 .get("basetime").toString().replace("\"", "")
                         callback(time, null)
-                        return
                     } else {
                         callback(null, response.code.toString())
-                        return
                     }
                 }
             }
@@ -391,7 +388,6 @@ object Web {
             //图片下载失败
             override fun onFailure(call: Call, e: IOException) {
                 callback(e.message)
-                return
             }
 
             //图片下载成功
@@ -401,10 +397,8 @@ object Web {
                     Files.copy(inputStream, path, StandardCopyOption.REPLACE_EXISTING)
                     inputStream.close()
                     callback(null)
-                    return
                 } else if (response.body?.byteStream() == null) {
                     callback("返回内容为空")
-                    return
                 }
             }
         })

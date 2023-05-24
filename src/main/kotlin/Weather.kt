@@ -34,6 +34,7 @@ object weatherMain : KotlinPlugin(
         WeatherCommand().register()
         ConfigureCommand().register()
         TyphoonCommand().register()
+        SeaSurfaceTempCommand().register()
         //----------------------
 
 

@@ -231,7 +231,7 @@ object Web {
                             if (picErr == null) {
                                 //图片文件获取成功
                                 //返回图片信息供上传
-                                callback("", imageName)
+                                callback(null, imageName)
                             } else {
                                 //图片文件获取失败
                                 //返回错误代码

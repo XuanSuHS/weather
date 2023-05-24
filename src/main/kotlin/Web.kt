@@ -1,14 +1,14 @@
 package top.xuansu.mirai.weather
 
 
+import com.google.gson.JsonObject
+import com.google.gson.JsonParseException
 import com.google.gson.JsonParser
-import net.mamoe.mirai.utils.info
 import okhttp3.*
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.RequestBody.Companion.toRequestBody
 import top.xuansu.mirai.weather.weatherMain.imageFolder
 import top.xuansu.mirai.weather.weatherMain.imageFolderPath
-import top.xuansu.mirai.weather.weatherMain.logger
 import java.io.File
 import java.io.IOException
 import java.io.InputStream
@@ -93,11 +93,13 @@ object Web {
             override fun onFailure(call: Call, e: IOException) {
                 // 请求失败时的回调
                 callback(false)
+                return
             }
 
             override fun onResponse(call: Call, response: Response) {
                 // 请求成功时的回调
                 callback(true)
+                return
             }
         })
     }
@@ -117,6 +119,7 @@ object Web {
             override fun onFailure(call: Call, e: IOException) {
                 // 请求失败时的回调
                 callback(e.message)
+                return
             }
 
             override fun onResponse(call: Call, response: Response) {
@@ -131,46 +134,20 @@ object Web {
                         }
                         Data.webCookieValue = Data.webCookie.split(";")[0].replace("csrftoken=", "")
                         callback(null)
+                        return
                     } else {
                         callback(response.code.toString())
+                        return
                     }
                 }
             }
         })
     }
 
-    fun getWeather(city: String) {
-        val cityNumber = getCityNumber(city).second
-        val url = getWeatherURL(cityNumber)
-        val imageName = "$cityNumber.png"
-        getPic(url, imageName) {}
-        return
-    }
-
-    fun getTyphoon(callback: (String?, String?) -> Unit) {
-        getTyphoonURL { time, urlErr ->
-            if (urlErr == null) {
-                val url = "https://easterlywave.com/media/typhoon/ensemble/$time/wpac.png"
-                val imageName = "$time-wpac.png"
-                if (imageFolder.resolve(imageName).exists()) {
-                    callback(imageName, null)
-                } else {
-                    getPic(url, imageName) { picErr ->
-                        if (picErr == null) {
-                            callback(imageName, null)
-                        } else {
-                            callback(null, "下载图片时出错：$picErr")
-                        }
-                    }
-                }
-            } else {
-                callback(null, "获取URL时出错：$urlErr")
-            }
-        }
-    }
-
-    //获取城市对应数字
-    fun getCityNumber(city: String): Pair<Int, Int> {
+    //获取城市WMO代号
+    //搜索成功时返回true与城市代号
+    //搜索失败时返回false与错误原因
+    fun getCityNumber(city: String, callback: (Boolean, String) -> Unit) {
 
         val mediaType = "application/json;charset=utf-8".toMediaTypeOrNull()
         val requestBody = "{\"content\":\"$city\"}".toRequestBody(mediaType)
@@ -183,30 +160,135 @@ object Web {
             .addHeader("x-csrftoken", Data.webCookieValue)
             .post(requestBody)
             .build()
-        val responseForCityNumber = client.newCall(requestForCityNumber).execute()
-        val responseJSON = JsonParser.parseString(responseForCityNumber.body!!.string()).asJsonObject
-        var responseStatus = responseJSON.get("status").toString().toInt()
-        //如果找不到结果则直接返回错误代码1
-        if (responseStatus == 1) {
-            return Pair(1, 0)
+
+        client.newCall(requestForCityNumber).enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                // 请求失败时的回调
+                callback(false, "${e.message}")
+                return
+            }
+
+            override fun onResponse(call: Call, response: Response) {
+                // 请求成功时的回调
+                response.use {
+                    if (response.isSuccessful) {
+                        var responseJSON = JsonObject()
+                        try {
+                            responseJSON = JsonParser.parseString(response.body!!.string()).asJsonObject
+                        } catch (e: JsonParseException) {
+                            if (e.message != null) {
+                                //获得非标准JSON，报错返回
+                                callback(false, "返回结果非标准JSON，请检查请求是否有误")
+                                return
+                            }
+                        }
+                        //status表搜索结果是否存在
+                        val status = responseJSON.get("status").toString()
+
+                        //搜索结果不存在时返回错误
+                        if (status == "1") {
+                            callback(false, "目标城市不存在")
+                            return
+                        }
+
+                        //搜索结果个数
+                        val suggestions = responseJSON.get("suggestions").asJsonArray
+                        //不止一个时返回错误
+                        if (suggestions.size() > 1) {
+                            callback(false, "目标城市过多，请再精确些")
+                            return
+                        }
+
+                        //搜索结果唯一时返回城市WMO代号
+                        val cityNumber =
+                            suggestions.get(0).asJsonObject.get("data").toString().replace("\"", "").toInt()
+                        callback(true, cityNumber.toString())
+                    } else {
+                        callback(false, response.code.toString())
+                    }
+                }
+            }
+        })
+    }
+
+    fun getWeather(city: String, callback: (String?, String) -> Unit) {
+
+        //获取城市WMO
+        getCityNumber(city) { isSuccess, data ->
+            if (isSuccess) {
+                //成功返回WMO
+                val cityNumber = data.toInt()
+
+                //获取城市图片URL
+                getWeatherURL(cityNumber) { picURI, urlErr ->
+                    if (urlErr == null) {
+                        //图片URL获取成功
+                        //返回图片信息
+                        val weatherPicURL = "https://www.easterlywave.com$picURI"
+                        val imageName = "$cityNumber.png"
+                        //获取图片
+                        getPic(weatherPicURL, imageName) { picErr ->
+                            if (picErr == null) {
+                                //图片文件获取成功
+                                //返回图片信息供上传
+                                callback("", imageName)
+                            } else {
+                                //图片文件获取失败
+                                //返回错误代码
+                                callback("下载图片时出错：$picErr", "")
+                            }
+                        }
+                    } else {
+                        //图片URL获取失败
+                        //返回错误代码
+                        callback("获取URL时出错：$urlErr", "")
+                    }
+                }
+            } else {
+                //执行时出错
+                callback("请求城市WMO时出错：$data", "")
+            }
         }
+    }
 
-        //找到结果则分析结果
-        val suggestions = responseJSON.get("suggestions").asJsonArray
-        var cityNumber = suggestions.get(0).asJsonObject.get("data").toString().replace("\"", "").toInt()
-
-        //如果备选项不止一个则返回代码2以及备选项个数
-        if (suggestions.size() > 1) {
-            responseStatus = 2
-            cityNumber = suggestions.size()
+    fun getTyphoon(callback: (String?, String?) -> Unit) {
+        getTyphoonURL { time, urlErr ->
+            if (urlErr == null) {
+                //图片URL获取成功
+                //根据URL信息获取图片文件
+                val url = "https://easterlywave.com/media/typhoon/ensemble/$time/wpac.png"
+                val imageName = "$time-wpac.png"
+                if (imageFolder.resolve(imageName).exists()) {
+                    callback(imageName, null)
+                    return@getTyphoonURL
+                } else {
+                    getPic(url, imageName) { picErr ->
+                        if (picErr == null) {
+                            //图片文件获取成功
+                            //返回图片信息供上传
+                            callback(imageName, null)
+                            return@getPic
+                        } else {
+                            //图片文件获取失败
+                            //返回错误信息
+                            callback(null, "下载图片时出错：$picErr")
+                            return@getPic
+                        }
+                    }
+                }
+            } else {
+                //图片URL获取失败
+                //返回错误信息
+                callback(null, "获取URL时出错：$urlErr")
+                return@getTyphoonURL
+            }
         }
-
-        //如果备选项只有一个则返回代码0以及城市对应WMO代号
-        return Pair(responseStatus, cityNumber)
     }
 
     //获取天气图片URL
-    private fun getWeatherURL(cityNumber: Int): String {
+    //callback第一个为回调数据，在此为图片URI
+    //callback第二个为错误信息，无错误时为null
+    private fun getWeatherURL(cityNumber: Int, callback: (String, String?) -> Unit) {
 
         //获取图片URL的文件地址部分
         val mediaType = "application/json;charset=utf-8".toMediaTypeOrNull()
@@ -222,11 +304,29 @@ object Web {
             .build()
 
         //处理返回的JSON
-        val responseForPicURL = client.newCall(requestForPicURL).execute()
-        val responseSRC =
-            JsonParser.parseString(responseForPicURL.body?.string()).asJsonObject.get("src").toString()
-                .replace("\"", "")
-        return "https://www.easterlywave.com".plus(responseSRC)
+        client.newCall(requestForPicURL).enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                // 请求失败时的回调
+                callback("null", e.message)
+                return
+            }
+
+            override fun onResponse(call: Call, response: Response) {
+                // 请求成功时的回调
+                response.use {
+                    if (response.isSuccessful) {
+                        val weatherPicURI =
+                            JsonParser.parseString(response.body?.string()).asJsonObject.get("src").toString()
+                                .replace("\"", "")
+                        callback(weatherPicURI, null)
+                        return
+                    } else {
+                        callback("null", response.code.toString())
+                        return
+                    }
+                }
+            }
+        })
     }
 
     //获取台风图片URL
@@ -250,6 +350,7 @@ object Web {
             override fun onFailure(call: Call, e: IOException) {
                 // 请求失败时的回调
                 callback(null, e.message)
+                return
             }
 
             override fun onResponse(call: Call, response: Response) {
@@ -262,8 +363,10 @@ object Web {
                                 .get(0).asJsonObject
                                 .get("basetime").toString().replace("\"", "")
                         callback(time, null)
+                        return
                     } else {
                         callback(null, response.code.toString())
+                        return
                     }
                 }
             }
@@ -284,11 +387,11 @@ object Web {
             .addHeader("Connection", "keep-alive")
             .build()
 
-        logger.info { "Downloading Image" }
         client.newCall(request).enqueue(object : Callback {
             //图片下载失败
             override fun onFailure(call: Call, e: IOException) {
                 callback(e.message)
+                return
             }
 
             //图片下载成功
@@ -298,13 +401,12 @@ object Web {
                     Files.copy(inputStream, path, StandardCopyOption.REPLACE_EXISTING)
                     inputStream.close()
                     callback(null)
+                    return
                 } else if (response.body?.byteStream() == null) {
                     callback("返回内容为空")
+                    return
                 }
             }
         })
-        //
-        //   End of the Part
-        //
     }
 }

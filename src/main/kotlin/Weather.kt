@@ -2,8 +2,8 @@ package top.xuansu.mirai.weather
 
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import net.mamoe.mirai.console.command.CommandManager.INSTANCE.register
 import net.mamoe.mirai.console.plugin.jvm.JvmPluginDescription
 import net.mamoe.mirai.console.plugin.jvm.KotlinPlugin
@@ -55,7 +55,7 @@ object weatherMain : KotlinPlugin(
 
         //初始化下载图片
         CoroutineScope(Dispatchers.IO).launch {
-            Web.getCookie() { err ->
+            Web.getCookie { err ->
                 if (err != null) {
                     logger.info("获取Cookie时出错：$err")
                 }
@@ -80,12 +80,17 @@ object weatherMain : KotlinPlugin(
                         return@forEachIndexed
                     }
 
-                    val groupCityNumber = Web.getCityNumber(groupCity).second
-                    val imageName = "$groupCityNumber.png"
-                    Web.getWeather(groupCity)
-                    delay(1500)
-                    val img = imageFolder.resolve(imageName).uploadAsImage(group, "png")
-                    group.sendMessage(img)
+                    Web.getWeather(groupCity) { err, imageName ->
+                        if (err != null) {
+                            runBlocking { group.sendMessage(err) }
+                        } else {
+                            runBlocking {
+                                val img = imageFolder.resolve(imageName).uploadAsImage(group, "png")
+                                group.sendMessage(img)
+                            }
+                        }
+                    }
+
                     return@forEachIndexed
                 }
             }

@@ -26,7 +26,7 @@ class WeatherCommand : SimpleCommand(
                 return
             }
 
-            Web.getWeather(city) { err, imageName ->
+            Web.CityWeatherFunc.getWeather(city) { err, imageName ->
                 if (err != null) {
                     runBlocking { group.sendMessage(err) }
                 } else {
@@ -46,7 +46,7 @@ class TyphoonCommand : SimpleCommand(
     secondaryNames = arrayOf("台风")
 ) {
     @Handler
-    suspend fun CommandSender.handle() {
+    suspend fun CommandSender.handle(areaIn: String = "") {
         val group: Group
         if (getGroupOrNull() != null) {
             group = getGroupOrNull()!!
@@ -54,7 +54,69 @@ class TyphoonCommand : SimpleCommand(
             if (group.id !in Config.enableGroups) {
                 return
             }
-            Web.getTyphoon { imageName, err ->
+
+            //检查海域输入
+            val area = when (areaIn) {
+                "" -> {
+                    Config.defaultSeaArea
+                }
+
+                !in Data.seaforUse -> {
+                    runBlocking { sendMessage("该海域不存在") }
+                    return
+                }
+
+                else -> {
+                    areaIn
+                }
+            }
+
+            Web.TyphoonFunc.getTyphoon(area) { imageName, err ->
+                if (err == null) {
+                    runBlocking {
+                        val img = imageFolder.resolve(imageName!!).uploadAsImage(group, "png")
+                        group.sendMessage(img)
+                    }
+                } else {
+                    runBlocking { sendMessage(err) }
+                }
+            }
+        }
+    }
+}
+
+class SeaSurfaceTempCommand : SimpleCommand(
+    owner = weatherMain,
+    primaryName = "sst",
+    secondaryNames = arrayOf("海温")
+) {
+    @Handler
+    suspend fun CommandSender.handle(areaIn: String = "") {
+        val group: Group
+        if (getGroupOrNull() != null) {
+            group = getGroupOrNull()!!
+            //如果本群未启用则退出
+            if (group.id !in Config.enableGroups) {
+                return
+            }
+
+            //检查海域输入
+            val area = when (areaIn) {
+                "" -> {
+                    Config.defaultSeaArea
+                }
+
+                !in Data.seaforUse -> {
+                    runBlocking { sendMessage("该海域不存在") }
+                    return
+                }
+
+                else -> {
+                    areaIn
+                }
+            }
+
+            Web.SSTFunc.getSST(area) { imageName, err ->
                 if (err == null) {
                     runBlocking {
                         val img = imageFolder.resolve(imageName!!).uploadAsImage(group, "png")
@@ -76,10 +138,12 @@ class ConfigureCommand : CompositeCommand(
     suspend fun CommandSender.setproxy(arg: String, address: String = "") {
         when (arg) {
             "on" -> {
-                Web.checkProxy(Config.proxyAddress) { status ->
+                Web.ProxyFunc.checkProxy(Config.proxyAddress) { status ->
                     if (status) {
                         runBlocking { sendMessage("代理地址：${Config.proxyAddress}\n测试通过，代理开启") }
-                        Web.enableProxy()
+                        Web.ProxyFunc.enableProxy()
+                        Config.isProxyEnabled = true
+                        Config.save()
                     } else {
                         runBlocking {
                             sendMessage(
@@ -91,7 +155,9 @@ class ConfigureCommand : CompositeCommand(
             }
 
             "off" -> {
-                Web.disableProxy()
+                Web.ProxyFunc.disableProxy()
+                Config.isProxyEnabled = false
+                Config.save()
                 sendMessage("关闭代理访问")
             }
 
@@ -105,7 +171,7 @@ class ConfigureCommand : CompositeCommand(
                     sendMessage("请输入正确的代理地址")
                     return
                 }
-                Web.checkProxy(address) { status ->
+                Web.ProxyFunc.checkProxy(address) { status ->
                     if (status) {
                         runBlocking { sendMessage("输入的地址为 $address 代理有效") }
                         Config.proxyAddress = address
@@ -144,13 +210,29 @@ class ConfigureCommand : CompositeCommand(
         }
     }
 
-    @SubCommand("default")
-    suspend fun CommandSender.setDefaultCity(city: String) {
+    @SubCommand("city")
+    suspend fun CommandSender.setDefaultCity(arg: String) {
         if (getGroupOrNull() != null) {
             val groupID = getGroupOrNull()!!.id
-            Web.getCityNumber(city) { isSuccessful, data ->
+            Web.CityWeatherFunc.getCityNumber(arg) { isSuccessful, data ->
                 if (isSuccessful) {
-                    runBlocking { sendMessage("已将群" + groupID + "的默认城市更改为" + city) }
+                    runBlocking { sendMessage("已将群" + groupID + "的默认城市更改为" + arg) }
+                } else {
+                    runBlocking { sendMessage("出错了：$data") }
+                }
+            }
+        } else {
+            sendMessage("请在群聊环境下触发")
+        }
+    }
+
+    @SubCommand("sea")
+    suspend fun CommandSender.setDefaultSea(arg: String) {
+        if (getGroupOrNull() != null) {
+            val groupID = getGroupOrNull()!!.id
+            Web.CityWeatherFunc.getCityNumber(arg) { isSuccessful, data ->
+                if (isSuccessful) {
+                    runBlocking { sendMessage("已将群" + groupID + "的默认城市更改为" + arg) }
                 } else {
                     runBlocking { sendMessage("出错了：$data") }
                 }
@@ -203,12 +285,12 @@ class ConfigureCommand : CompositeCommand(
     }
 
     @SubCommand("dev")
-    suspend fun CommandSender.dev(city: String) {
-        Web.getWeather(city) { err, imageName ->
-            if (err != null) {
-                runBlocking { sendMessage(err) }
+    suspend fun CommandSender.dev(area: String) {
+        Web.SSTFunc.getSST(area) { image, err ->
+            if (err == null) {
+                runBlocking { sendMessage("image:$image") }
             } else {
-                runBlocking { sendMessage("Finished, imageName:$imageName") }
+                runBlocking { sendMessage("Err:$err") }
             }
         }
     }

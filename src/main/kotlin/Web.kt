@@ -130,12 +130,12 @@ object Web {
                 response.use {
                     if (response.isSuccessful) {
                         //设置Cookie
-                        Data.webCookie = if (response.header("Set-Cookie") != null)
+                        saveData.webCookie = if (response.header("Set-Cookie") != null)
                             (response.header("Set-Cookie")!!)
                         else {
                             "null"
                         }
-                        Data.webCookieValue = Data.webCookie.split(";")[0].replace("csrftoken=", "")
+                        saveData.webCookieValue = saveData.webCookie.split(";")[0].replace("csrftoken=", "")
                         callback(null)
                         return
                     } else {
@@ -186,6 +186,7 @@ object Web {
     }
 
     //天气相关函数
+    //基于EasterlyWave
     object CityWeatherFunc {
         //获取城市WMO代号
         //搜索成功时返回true与城市代号
@@ -196,11 +197,11 @@ object Web {
             val requestBody = "{\"content\":\"$city\"}".toRequestBody(mediaType)
             val requestForCityNumber = Request.Builder()
                 .url("https://www.easterlywave.com/action/weather/search")
-                .header("Cookie", Data.webCookie)
+                .header("Cookie", saveData.webCookie)
                 .addHeader("Content-Type", "application/json")
                 .addHeader("Connection", "keep-alive")
                 .addHeader("Referer", "https://www.easterlywave.com/weather/")
-                .addHeader("x-csrftoken", Data.webCookieValue)
+                .addHeader("x-csrftoken", saveData.webCookieValue)
                 .post(requestBody)
                 .build()
 
@@ -304,11 +305,11 @@ object Web {
             val requestBody = "{\"content\":\"$cityNumber\"}".toRequestBody(mediaType)
             val requestForPicURL = Request.Builder()
                 .url("https://www.easterlywave.com/action/weather/plot")
-                .header("Cookie", Data.webCookie)
+                .header("Cookie", saveData.webCookie)
                 .addHeader("Content-Type", "application/json")
                 .addHeader("Connection", "keep-alive")
                 .addHeader("Referer", "https://www.easterlywave.com/weather/")
-                .addHeader("x-csrftoken", Data.webCookieValue)
+                .addHeader("x-csrftoken", saveData.webCookieValue)
                 .post(requestBody)
                 .build()
 
@@ -342,61 +343,32 @@ object Web {
 
     //台风相关函数
     object TyphoonFunc {
-        fun getTyphoon(area: String, callback: (String?, String?) -> Unit) {
-            //检查传入海域信息
-            //错误时回调ERR
-            if (area !in Data.seaforUse) {
-                callback(null, "该海域不存在")
-                return
-            }
+        fun getTyphoon(callback: (Boolean, String?) -> Unit) {
+            //TODO:重写：综合不同机构的预报，加上卫星图片
+            getTyphoonData { status, data ->
+                if (status) {
 
-            getTyphoonURL { time, urlErr ->
-                if (urlErr == null) {
-                    //图片URL获取成功
-                    //根据URL信息获取图片文件
-                    val url = "https://easterlywave.com/media/typhoon/ensemble/$time/$area.png"
-                    val imageName = "$time-$area.png"
-                    if (imageFolder.resolve(imageName).exists()) {
-                        callback(imageName, null)
-                        return@getTyphoonURL
-                    } else {
-                        getPic(url, imageName) { picErr ->
-                            if (picErr == null) {
-                                //图片文件获取成功
-                                //返回图片信息供上传
-                                callback(imageName, null)
-                                return@getPic
-                            } else {
-                                //图片文件获取失败
-                                //返回错误信息
-                                callback(null, "下载图片时出错：$picErr")
-                                return@getPic
-                            }
-                        }
-                    }
                 } else {
-                    //图片URL获取失败
-                    //返回错误信息
-                    callback(null, "获取URL时出错：$urlErr")
-                    return@getTyphoonURL
+                    callback(false, data)
                 }
             }
         }
 
         //获取台风图片URL
+        //基于EasterlyWave
         //回调值第一个为成功时数据
         //第二个是出错时错误代码
-        private fun getTyphoonURL(callback: (String?, String?) -> Unit) {
+        private fun getECUrl(callback: (String?, String?) -> Unit) {
 
             val mediaType = "application/json;charset=utf-8".toMediaTypeOrNull()
             val requestBody = "".toRequestBody(mediaType)
             val request = Request.Builder()
                 .url("https://www.easterlywave.com/action/typhoon/ecens")
-                .header("Cookie", Data.webCookie)
+                .header("Cookie", saveData.webCookie)
                 .addHeader("Content-Type", "application/json")
                 .addHeader("Connection", "keep-alive")
                 .addHeader("Referer", "https://www.easterlywave.com/typhoon/ensemble/")
-                .addHeader("x-csrftoken", Data.webCookieValue)
+                .addHeader("x-csrftoken", saveData.webCookieValue)
                 .post(requestBody)
                 .build()
 
@@ -423,12 +395,118 @@ object Web {
                 }
             })
         }
+
+
+        //获取现存台风数据
+        //基于EasterlyWave
+        //存在台风时回调true和台风个数
+        //不存在台风时
+        fun getTyphoonData(callback: (Boolean, String?) -> Unit) {
+            val mediaType = "application/json;charset=utf-8".toMediaTypeOrNull()
+            val requestBody = "".toRequestBody(mediaType)
+            val request = Request.Builder()
+                .url("https://www.easterlywave.com/action/typhoon/sector")
+                .header("Cookie", saveData.webCookie)
+                .addHeader("Content-Type", "application/json")
+                .addHeader("Connection", "keep-alive")
+                .addHeader("Referer", "https://www.easterlywave.com/typhoon/")
+                .addHeader("x-csrftoken", saveData.webCookieValue)
+                .post(requestBody)
+                .build()
+
+            client.newCall(request).enqueue(object : Callback {
+                override fun onFailure(call: Call, e: IOException) {
+                    // 请求失败时的回调
+                    callback(false, e.message)
+                }
+
+                override fun onResponse(call: Call, response: Response) {
+                    // 请求成功时的回调
+                    response.use {
+                        if (response.isSuccessful) {
+                            if (response.body != null) {
+                                Data.TyphoonData.clear()
+                                val responseData = response.body!!.string()
+                                val typhoonData = JsonParser.parseString(responseData).asJsonObject
+                                //设置 需要关注的台风
+                                Data.typhoonFocus = typhoonData.get("focus").toString().replace("\"", "")
+
+                                //详细台风信息
+                                val stormsArray = typhoonData.get("storms").asJsonArray
+                                val stormCount = stormsArray.size()
+                                //如果没台风，直接回调
+                                if (stormCount == 0) {
+                                    callback(false, "当前无台风")
+                                    return
+                                }
+
+                                for (i in 0 until stormCount) {
+                                    val stormData = stormsArray.get(i).asJsonObject
+                                    val code = stormData.get("code").toString().replace("\"", "")
+                                    val name = stormData.get("name").toString().replace("\"", "")
+                                    val basin = stormData.get("basin").toString().replace("\"", "")
+                                    val longitude = stormData.get("lonstr").toString().replace("\"", "")
+                                    val latitude = stormData.get("latstr").toString().replace("\"", "")
+                                    val windSpeed = stormData.get("wind").toString().replace("\"", "").plus(" Kt")
+                                    val pressure = stormData.get("pressure").toString().replace("\"", "").plus(" hPa")
+                                    val isSatelliteTarget =
+                                        stormData.get("is_target").toString().replace("\"", "").toBoolean()
+                                    Data.TyphoonData[code] = Data.TyphoonDataClass(
+                                        name,
+                                        basin,
+                                        longitude,
+                                        latitude,
+                                        windSpeed,
+                                        pressure,
+                                        isSatelliteTarget
+                                    )
+                                }
+                                callback(true, "")
+                            } else {
+                                callback(false, "返回内容为空")
+                            }
+
+                        } else {
+                            callback(true, response.code.toString())
+                        }
+                    }
+                }
+            })
+        }
+
+
+        fun getTyphoonSatePic(code: String, picType: String, callback: (Boolean, String?) -> Unit) {
+            //查询图片类型是否存在
+            //TODO
+            //查询台风是否存在
+            if (!Data.TyphoonData.containsKey(code)) {
+                callback(false, "未找到$code")
+                return
+            }
+
+            //是否有卫星图片
+            else if (!Data.TyphoonData[code]!!.isSatelliteTarget) {
+                callback(false, "此台风不存在卫星图片")
+                return
+            }
+
+            //从Dapiya网站下载指定卫星图片
+            val url = "https://data.dapiya.top/history/$code/$picType/${code}_${picType}.png"
+            val imageName = "${code}_${picType}.png"
+            getPic(url, imageName) { err ->
+                if (err == null) {
+                    callback(true, imageName)
+                } else {
+                    callback(false, err)
+                }
+            }
+        }
     }
 
     //海温相关函数
     object SSTFunc {
 
-        fun getSST(area: String, callback: (String?, String?) -> Unit) {
+        fun getSSTbyRTOFS(area: String, callback: (String?, String?) -> Unit) {
             //检查传入海域信息
             //错误时回调ERR
             if (area !in Data.seaforUse) {
@@ -436,7 +514,7 @@ object Web {
                 return
             }
 
-            getSSTUrl { time, urlErr ->
+            getSSTbyRTOFSUrl { time, urlErr ->
                 if (urlErr == null) {
                     //图片URL获取成功
                     //根据URL信息获取图片文件
@@ -444,7 +522,7 @@ object Web {
                     val imageName = "$time-$area.png"
                     if (imageFolder.resolve(imageName).exists()) {
                         callback(imageName, null)
-                        return@getSSTUrl
+                        return@getSSTbyRTOFSUrl
                     } else {
                         getPic(url, imageName) { picErr ->
                             if (picErr == null) {
@@ -464,22 +542,22 @@ object Web {
                     //图片URL获取失败
                     //返回错误信息
                     callback(null, "获取URL时出错：$urlErr")
-                    return@getSSTUrl
+                    return@getSSTbyRTOFSUrl
                 }
             }
         }
 
-        private fun getSSTUrl(callback: (String, String?) -> Unit) {
+        private fun getSSTbyRTOFSUrl(callback: (String, String?) -> Unit) {
 
             val mediaType = "application/json;charset=utf-8".toMediaTypeOrNull()
             val requestBody = "".toRequestBody(mediaType)
             val request = Request.Builder()
                 .url("https://www.easterlywave.com/action/typhoon/sst")
-                .header("Cookie", Data.webCookie)
+                .header("Cookie", saveData.webCookie)
                 .addHeader("Content-Type", "application/json")
                 .addHeader("Connection", "keep-alive")
                 .addHeader("Referer", "https://www.easterlywave.com/typhoon/sst/")
-                .addHeader("x-csrftoken", Data.webCookieValue)
+                .addHeader("x-csrftoken", saveData.webCookieValue)
                 .post(requestBody)
                 .build()
 

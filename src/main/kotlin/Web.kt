@@ -342,13 +342,20 @@ object Web {
 
     //台风相关函数
     object TyphoonFunc {
-        fun getTyphoon(callback: (String?, String?) -> Unit) {
+        fun getTyphoon(area: String, callback: (String?, String?) -> Unit) {
+            //检查传入海域信息
+            //错误时回调ERR
+            if (area !in Data.seaforUse) {
+                callback(null, "该海域不存在")
+                return
+            }
+
             getTyphoonURL { time, urlErr ->
                 if (urlErr == null) {
                     //图片URL获取成功
                     //根据URL信息获取图片文件
-                    val url = "https://easterlywave.com/media/typhoon/ensemble/$time/wpac.png"
-                    val imageName = "$time-wpac.png"
+                    val url = "https://easterlywave.com/media/typhoon/ensemble/$time/$area.png"
+                    val imageName = "$time-$area.png"
                     if (imageFolder.resolve(imageName).exists()) {
                         callback(imageName, null)
                         return@getTyphoonURL
@@ -421,8 +428,15 @@ object Web {
     //海温相关函数
     object SSTFunc {
 
-        fun getSST(area: String = "wpac", callback: (String?, String?) -> Unit) {
-            getSSTURL { time, urlErr ->
+        fun getSST(area: String, callback: (String?, String?) -> Unit) {
+            //检查传入海域信息
+            //错误时回调ERR
+            if (area !in Data.seaforUse) {
+                callback(null, "该海域不存在")
+                return
+            }
+
+            getSSTUrl { time, urlErr ->
                 if (urlErr == null) {
                     //图片URL获取成功
                     //根据URL信息获取图片文件
@@ -430,7 +444,7 @@ object Web {
                     val imageName = "$time-$area.png"
                     if (imageFolder.resolve(imageName).exists()) {
                         callback(imageName, null)
-                        return@getSSTURL
+                        return@getSSTUrl
                     } else {
                         getPic(url, imageName) { picErr ->
                             if (picErr == null) {
@@ -450,12 +464,12 @@ object Web {
                     //图片URL获取失败
                     //返回错误信息
                     callback(null, "获取URL时出错：$urlErr")
-                    return@getSSTURL
+                    return@getSSTUrl
                 }
             }
         }
 
-        private fun getSSTURL(callback: (String, String?) -> Unit) {
+        private fun getSSTUrl(callback: (String, String?) -> Unit) {
 
             val mediaType = "application/json;charset=utf-8".toMediaTypeOrNull()
             val requestBody = "".toRequestBody(mediaType)

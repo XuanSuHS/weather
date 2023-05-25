@@ -46,7 +46,7 @@ class TyphoonCommand : SimpleCommand(
     secondaryNames = arrayOf("台风")
 ) {
     @Handler
-    suspend fun CommandSender.handle() {
+    suspend fun CommandSender.handle(areaIn: String = "") {
         val group: Group
         if (getGroupOrNull() != null) {
             group = getGroupOrNull()!!
@@ -54,7 +54,24 @@ class TyphoonCommand : SimpleCommand(
             if (group.id !in Config.enableGroups) {
                 return
             }
-            Web.TyphoonFunc.getTyphoon { imageName, err ->
+
+            //检查海域输入
+            val area = when (areaIn) {
+                "" -> {
+                    Config.defaultSeaArea
+                }
+
+                !in Data.seaforUse -> {
+                    runBlocking { sendMessage("该海域不存在") }
+                    return
+                }
+
+                else -> {
+                    areaIn
+                }
+            }
+
+            Web.TyphoonFunc.getTyphoon(area) { imageName, err ->
                 if (err == null) {
                     runBlocking {
                         val img = imageFolder.resolve(imageName!!).uploadAsImage(group, "png")
@@ -74,7 +91,7 @@ class SeaSurfaceTempCommand : SimpleCommand(
     secondaryNames = arrayOf("海温")
 ) {
     @Handler
-    suspend fun CommandSender.handle() {
+    suspend fun CommandSender.handle(areaIn: String = "") {
         val group: Group
         if (getGroupOrNull() != null) {
             group = getGroupOrNull()!!
@@ -82,7 +99,24 @@ class SeaSurfaceTempCommand : SimpleCommand(
             if (group.id !in Config.enableGroups) {
                 return
             }
-            Web.TyphoonFunc.getTyphoon { imageName, err ->
+
+            //检查海域输入
+            val area = when (areaIn) {
+                "" -> {
+                    Config.defaultSeaArea
+                }
+
+                !in Data.seaforUse -> {
+                    runBlocking { sendMessage("该海域不存在") }
+                    return
+                }
+
+                else -> {
+                    areaIn
+                }
+            }
+
+            Web.SSTFunc.getSST(area) { imageName, err ->
                 if (err == null) {
                     runBlocking {
                         val img = imageFolder.resolve(imageName!!).uploadAsImage(group, "png")

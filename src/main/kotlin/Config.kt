@@ -9,4 +9,5 @@ object Config : AutoSavePluginConfig("config") {
     var proxyAddress: String by value("127.0.0.1:7890")
     val enableGroups: MutableSet<Long> by value(mutableSetOf())
     const val defaultSeaArea = "wpac"
+    const val defaultImgType = "VIS"
 }

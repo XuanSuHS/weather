@@ -6,6 +6,7 @@ import net.mamoe.mirai.console.command.CompositeCommand
 import net.mamoe.mirai.console.command.SimpleCommand
 import net.mamoe.mirai.console.command.getGroupOrNull
 import net.mamoe.mirai.contact.Group
+import net.mamoe.mirai.message.data.PlainText
 import net.mamoe.mirai.utils.ExternalResource.Companion.uploadAsImage
 import top.xuansu.mirai.weather.weatherMain.imageFolder
 import top.xuansu.mirai.weather.weatherMain.reload
@@ -46,7 +47,7 @@ class TyphoonCommand : SimpleCommand(
     secondaryNames = arrayOf("台风")
 ) {
     @Handler
-    suspend fun CommandSender.handle(areaIn: String = "") {
+    suspend fun CommandSender.handle(codeIn: String = "") {
         val group: Group
         if (getGroupOrNull() != null) {
             group = getGroupOrNull()!!
@@ -54,31 +55,114 @@ class TyphoonCommand : SimpleCommand(
             if (group.id !in Config.enableGroups) {
                 return
             }
-
-            //检查海域输入
-            val area = when (areaIn) {
-                "" -> {
-                    Config.defaultSeaArea
+            var isError = false
+            //更新台风信息
+            Web.TyphoonFunc.getTyphoonData { status, data ->
+                if (!status) {
+                    runBlocking { sendMessage("更新信息时出错：$data") }
+                    isError = true
                 }
+            }
+            if (isError) {
+                return
+            }
 
-                !in Data.seaforUse -> {
-                    runBlocking { sendMessage("该海域不存在") }
-                    return
+
+            var message = ""
+            //检查台风代号可用性
+            val code = codeIn.uppercase()
+            val typhoonCode = if ((code in setOf("", "0", "default", "默认")) && (Data.typhoonFocus != "")) {
+                Data.typhoonFocus
+            } else if (Data.TyphoonData.containsKey(code)) {
+                code
+            } else {
+                sendMessage("请输入目标台风代号")
+                return
+            }
+
+            //加入台风代号文字信息
+            val typhoonData = Data.TyphoonData[typhoonCode]!!
+            message += "$typhoonCode.${typhoonData.name}\n"
+                .plus("风速：${typhoonData.windSpeed}\n")
+                .plus("气压：${typhoonData.pressure}")
+                .plus("位置：${typhoonData.longitude} ${typhoonData.latitude}\n")
+
+            val imgType = Config.defaultImgType
+            Web.TyphoonFunc.getTyphoonSatePic(typhoonCode, imgType) { status, data ->
+                if (status) {
+                    runBlocking {
+                        val img = imageFolder.resolve(data!!).uploadAsImage(group, "png")
+                        group.sendMessage(PlainText(message) + img)
+                    }
+                } else {
+                    runBlocking { sendMessage("下载图片时出错：$data") }
+                }
+            }
+        }
+    }
+}
+
+class TyphoonImgCommand : SimpleCommand(
+    owner = weatherMain,
+    primaryName = "typhoon-img",
+    secondaryNames = arrayOf("台风图片")
+) {
+    @Handler
+    suspend fun CommandSender.handle(codeIn: String = "", imageType: String = "") {
+        val group: Group
+        if (getGroupOrNull() != null) {
+            group = getGroupOrNull()!!
+            //如果本群未启用则退出
+            if (group.id !in Config.enableGroups) {
+                return
+            }
+            var isError = false
+            //更新台风信息
+            Web.TyphoonFunc.getTyphoonData { status, data ->
+                if (!status) {
+                    runBlocking { sendMessage("更新信息时出错：$data") }
+                    isError = true
+                }
+            }
+            if (isError) {
+                return
+            }
+
+            //检查台风代号可用性
+            val code = codeIn.uppercase()
+            val typhoonCode = if ((code in setOf("", "0", "default", "默认")) && (Data.typhoonFocus != "")) {
+                Data.typhoonFocus
+            } else if (Data.TyphoonData.containsKey(code)) {
+                code
+            } else {
+                sendMessage("请输入目标台风代号")
+                return
+            }
+
+            //检查图片搜索类型可用性
+            val imgType = when (val imgIn = imageType.uppercase()) {
+
+                in arrayOf("", "default", "默认") -> {
+                    Config.defaultImgType
                 }
 
                 else -> {
-                    areaIn
+                    if (imgIn !in Data.sateImgType) {
+                        sendMessage("不支持的图片类型")
+                        return
+                    }
+                    imgIn
                 }
             }
 
-            Web.TyphoonFunc.getTyphoon(area) { imageName, err ->
-                if (err == null) {
+            Web.TyphoonFunc.getTyphoonSatePic(typhoonCode, imgType) { status, data ->
+                if (status) {
                     runBlocking {
-                        val img = imageFolder.resolve(imageName!!).uploadAsImage(group, "png")
+                        val img = imageFolder.resolve(data!!).uploadAsImage(group, "png")
                         group.sendMessage(img)
                     }
                 } else {
-                    runBlocking { sendMessage(err) }
+                    runBlocking { sendMessage("出错了：$data") }
                 }
             }
         }
@@ -116,7 +200,7 @@ class SeaSurfaceTempCommand : SimpleCommand(
                 }
             }
 
-            Web.SSTFunc.getSST(area) { imageName, err ->
+            Web.SSTFunc.getSSTbyRTOFS(area) { imageName, err ->
                 if (err == null) {
                     runBlocking {
                         val img = imageFolder.resolve(imageName!!).uploadAsImage(group, "png")
@@ -255,8 +339,8 @@ class ConfigureCommand : CompositeCommand(
                     "代理未启用\n"
                 }
 
-                message += if (Data.defaultCityPerGroup[group.id] != null) {
-                    "默认城市：${Data.defaultCityPerGroup[group.id]}"
+                message += if (saveData.defaultCityPerGroup[group.id] != null) {
+                    "默认城市：${saveData.defaultCityPerGroup[group.id]}"
                 } else {
                     "默认城市未设置"
                 }
@@ -285,12 +369,54 @@ class ConfigureCommand : CompositeCommand(
     }
 
     @SubCommand("dev")
-    suspend fun CommandSender.dev(area: String) {
-        Web.SSTFunc.getSST(area) { image, err ->
-            if (err == null) {
-                runBlocking { sendMessage("image:$image") }
+    suspend fun CommandSender.dev() {
+        Web.TyphoonFunc.getTyphoonData { status, err ->
+            if (status) {
+                runBlocking {
+                    sendMessage("Success")
+                    var message = ""
+                    val stormCount = Data.TyphoonData.count()
+                    var i = 0
+                    for ((code, data) in Data.TyphoonData) {
+                        i += 1
+                        message += "代号：$code\n"
+                            .plus("名字：${data.name}\n")
+                            .plus("地区：${data.basin}\n")
+                            .plus("位置：${data.longitude} ${data.latitude}\n")
+                            .plus("中心最大风速：${data.windSpeed}\n")
+                            .plus("中心最低气压：${data.pressure}\n")
+                            .plus("是否有卫星图片：${data.isSatelliteTarget}")
+                        if (i < stormCount) {
+                            message += "\n\n"
+                        }
+                    }
+                    sendMessage(message)
+                }
             } else {
-                runBlocking { sendMessage("Err:$err") }
+                runBlocking { sendMessage("Err: $err") }
+            }
+        }
+    }
+}
+
+class DevCommand : SimpleCommand(
+    owner = weatherMain,
+    primaryName = "dev"
+) {
+    @Handler
+    suspend fun CommandSender.handle(code: String, picType: String) {
+        if (!Data.TyphoonData.containsKey(code)) {
+            sendMessage("err")
+            return
+        } else {
+            sendMessage("找到了$code")
+        }
+
+        Web.TyphoonFunc.getTyphoonSatePic(code, picType.uppercase()) { status, data ->
+            if (status) {
+                runBlocking { sendMessage("Finished: $data") }
+            } else {
+                runBlocking { sendMessage("Err: $data") }
             }
         }
     }

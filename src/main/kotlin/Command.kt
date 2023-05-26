@@ -44,7 +44,7 @@ class WeatherCommand : SimpleCommand(
 class TyphoonCommand : SimpleCommand(
     owner = weatherMain,
     primaryName = "typhoon",
-    secondaryNames = arrayOf("台风")
+    secondaryNames = arrayOf("台风", "ty")
 ) {
     @Handler
     suspend fun CommandSender.handle(codeIn: String = "") {
@@ -55,8 +55,22 @@ class TyphoonCommand : SimpleCommand(
             if (group.id !in Config.enableGroups) {
                 return
             }
-            var isError = false
+
+            //输出帮助信息
+            if (codeIn.lowercase() in setOf("help", "帮助")) {
+                var message = "显示当前活动台风基础信息\n"
+                    .plus("命令格式：/typhoon [台风代号]\n")
+                    .plus("当前可用台风：")
+                val stormList = Data.TyphoonData.keys.toList()
+                stormList.forEach {
+                    message += "[$it] "
+                }
+                sendMessage(message)
+                return
+            }
+
             //更新台风信息
+            var isError = false
             Web.TyphoonFunc.getTyphoonData { status, data ->
                 if (!status) {
                     runBlocking { sendMessage("更新信息时出错：$data") }
@@ -70,22 +84,32 @@ class TyphoonCommand : SimpleCommand(
 
             var message = ""
             //检查台风代号可用性
-            val code = codeIn.uppercase()
-            val typhoonCode = if ((code in setOf("", "0", "default", "默认")) && (Data.typhoonFocus != "")) {
-                Data.typhoonFocus
-            } else if (Data.TyphoonData.containsKey(code)) {
-                code
-            } else {
-                sendMessage("请输入目标台风代号")
-                return
+            val codeCheckResult = Web.TyphoonFunc.checkTyphoonCode(codeIn)
+            val typhoonCode = when (codeCheckResult.first) {
+                true -> {
+                    codeCheckResult.second
+                }
+
+                false -> {
+                    sendMessage(codeCheckResult.second)
+                    return
+                }
             }
 
             //加入台风代号文字信息
             val typhoonData = Data.TyphoonData[typhoonCode]!!
             message += "$typhoonCode.${typhoonData.name}\n"
                 .plus("风速：${typhoonData.windSpeed}\n")
-                .plus("气压：${typhoonData.pressure}")
+                .plus("气压：${typhoonData.pressure}\n")
                 .plus("位置：${typhoonData.longitude} ${typhoonData.latitude}\n")
+
+            //加入台风图片
+            //如该台风不存在图片则跳过
+            if (!Data.TyphoonData[typhoonCode]!!.isSatelliteTarget) {
+                message += "该台风无图片"
+                sendMessage(message)
+                return
+            }
 
             val imgType = Config.defaultImgType
             Web.TyphoonFunc.getTyphoonSatePic(typhoonCode, imgType) { status, data ->
@@ -105,67 +129,130 @@ class TyphoonCommand : SimpleCommand(
 class TyphoonImgCommand : SimpleCommand(
     owner = weatherMain,
     primaryName = "typhoon-img",
-    secondaryNames = arrayOf("台风图片")
+    secondaryNames = arrayOf("台风图片", "ty-img", "tyImg")
 ) {
     @Handler
     suspend fun CommandSender.handle(codeIn: String = "", imageType: String = "") {
-        val group: Group
-        if (getGroupOrNull() != null) {
-            group = getGroupOrNull()!!
-            //如果本群未启用则退出
-            if (group.id !in Config.enableGroups) {
-                return
-            }
-            var isError = false
-            //更新台风信息
-            Web.TyphoonFunc.getTyphoonData { status, data ->
-                if (!status) {
-                    runBlocking { sendMessage("更新信息时出错：$data") }
-                    isError = true
+
+        if (getGroupOrNull() == null) {
+            sendMessage("请在群聊下执行")
+            return
+        }
+        val group = getGroupOrNull()!!
+        //如果本群未启用则退出
+        if (group.id !in Config.enableGroups) {
+            return
+        }
+
+        //输出帮助信息
+        if (codeIn.lowercase() in setOf("help", "帮助")) {
+            var message = "显示当前活动台风卫星图片\n"
+                .plus("命令格式：/typhoon-img [台风代号] [图片类型]\n")
+                .plus("当前可用台风：")
+            val stormList = Data.TyphoonData.keys.toList()
+            stormList.forEach {
+                if (Data.TyphoonData[it]!!.isSatelliteTarget) {
+                    message += "[$it] "
                 }
             }
-            if (isError) {
-                return
-            }
+            sendMessage(message)
+            return
+        }
 
-            //检查台风代号可用性
-            val code = codeIn.uppercase()
-            val typhoonCode = if ((code in setOf("", "0", "default", "默认")) && (Data.typhoonFocus != "")) {
-                Data.typhoonFocus
-            } else if (Data.TyphoonData.containsKey(code)) {
-                code
-            } else {
-                sendMessage("请输入目标台风代号")
-                return
-            }
-
-            //检查图片搜索类型可用性
-            val imgType = when (val imgIn = imageType.uppercase()) {
-
-                in arrayOf("", "default", "默认") -> {
-                    Config.defaultImgType
-                }
-
-                else -> {
-                    if (imgIn !in Data.sateImgType) {
-                        sendMessage("不支持的图片类型")
-                        return
-                    }
-                    imgIn
-                }
-            }
-
-            Web.TyphoonFunc.getTyphoonSatePic(typhoonCode, imgType) { status, data ->
-                if (status) {
-                    runBlocking {
-                        val img = imageFolder.resolve(data!!).uploadAsImage(group, "png")
-                        group.sendMessage(img)
-                    }
-                } else {
-                    runBlocking { sendMessage("出错了：$data") }
-                }
+        //更新台风信息
+        var isError = false
+        Web.TyphoonFunc.getTyphoonData { status, data ->
+            if (!status) {
+                runBlocking { sendMessage("更新信息时出错：$data") }
+                isError = true
             }
         }
+        if (isError) {
+            return
+        }
+
+        //检查台风代号可用性
+        val codeCheckResult = Web.TyphoonFunc.checkTyphoonCode(codeIn)
+        val typhoonCode = when (codeCheckResult.first) {
+            true -> {
+                codeCheckResult.second
+            }
+
+            false -> {
+                sendMessage(codeCheckResult.second)
+                return
+            }
+        }
+
+        //检查图片搜索类型可用性
+        val imgTypeCheckResult = Web.TyphoonFunc.checkImgType(imageType)
+        val imgType = when (imgTypeCheckResult.first) {
+            true -> {
+                imgTypeCheckResult.second
+            }
+
+            false -> {
+                sendMessage(imgTypeCheckResult.second)
+                return
+            }
+        }
+
+        Web.TyphoonFunc.getTyphoonSatePic(typhoonCode, imgType) { status, data ->
+            if (status) {
+                runBlocking {
+                    val img = imageFolder.resolve(data!!).uploadAsImage(group, "png")
+                    group.sendMessage(img)
+                }
+            } else {
+                runBlocking { sendMessage("出错了：$data") }
+            }
+        }
+    }
+}
+
+
+class TyphoonForecastCommand : SimpleCommand(
+    owner = weatherMain,
+    primaryName = "typhoon-forecast",
+    secondaryNames = arrayOf("台风预报", "ty-fore", "ty-forecast", "tyFore")
+) {
+    @Handler
+    suspend fun CommandSender.handle(code: String = "", imageType: String = "") {
+        if (getGroupOrNull() == null) {
+            sendMessage("请在群聊下执行")
+            return
+        }
+
+        //如果本群未启用则退出
+        val group = getGroupOrNull()!!
+        if (group.id !in Config.enableGroups) {
+            return
+        }
+        var isError = false
+        //更新台风信息
+        Web.TyphoonFunc.getTyphoonData { status, data ->
+            if (!status) {
+                runBlocking { sendMessage("更新信息时出错：$data") }
+                isError = true
+            }
+        }
+        if (isError) {
+            return
+        }
+
+        //检查台风代号可用性
+        val codeCheckResult = Web.TyphoonFunc.checkTyphoonCode(code)
+        val typhoonCode = when (codeCheckResult.first) {
+            true -> {
+                codeCheckResult.second
+            }
+
+            false -> {
+                sendMessage(codeCheckResult.second)
+                return
+            }
+        }
+        //TODO:预报
     }
 }
 

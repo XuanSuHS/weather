@@ -343,6 +343,51 @@ object Web {
 
     //台风相关函数
     object TyphoonFunc {
+
+        //检查输入台风是否满足要求
+        fun checkTyphoonCode(code: String): Pair<Boolean, String> {
+            val pairReturn = when (val codeUp = code.uppercase()) {
+                in setOf("", "0", "default", "默认") -> {
+                    if (Data.typhoonFocus != "") {
+                        Pair(true, Data.typhoonFocus)
+                    } else {
+                        Pair(false, "此台风代号不存在\n".plus("现存台风代号：${Data.TyphoonData.keys}"))
+                    }
+                }
+
+                in Data.TyphoonData.keys -> {
+                    Pair(true, codeUp)
+                }
+
+                else -> {
+                    Pair(false, "此台风代号不存在\n".plus("现存台风代号：${Data.TyphoonData.keys}"))
+                }
+            }
+            return pairReturn
+        }
+
+        //检查图片是否符合需求
+        fun checkImgType(imageType: String): Pair<Boolean, String> {
+            val result = when (val imgIn = imageType.uppercase()) {
+                in arrayOf("", "DEFAULT", "默认") -> {
+                    Pair(true, Config.defaultImgType)
+                }
+
+                in Data.sateImgType -> {
+                    Pair(true, imgIn)
+                }
+
+                "HELP" -> {
+                    Pair(false, "支持的图片类型为：${Data.sateImgType}")
+                }
+
+                else -> {
+                    Pair(false, "不支持的图片类型\n".plus("支持的图片类型为：${Data.sateImgType}"))
+                }
+            }
+            return result
+        }
+
         fun getTyphoon(callback: (Boolean, String?) -> Unit) {
             //TODO:重写：综合不同机构的预报，加上卫星图片
             getTyphoonData { status, data ->

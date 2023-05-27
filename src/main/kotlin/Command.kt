@@ -70,14 +70,9 @@ class TyphoonCommand : SimpleCommand(
             }
 
             //更新台风信息
-            var isError = false
-            Web.TyphoonFunc.getTyphoonData { status, data ->
-                if (!status) {
-                    runBlocking { sendMessage("更新信息时出错：$data") }
-                    isError = true
-                }
-            }
-            if (isError) {
+            val typhoonDataResponse = Web.TyphoonFunc.getTyphoonData()
+            if (!typhoonDataResponse.first) {
+                runBlocking { sendMessage("更新信息时出错：$${typhoonDataResponse.second}") }
                 return
             }
 
@@ -160,14 +155,9 @@ class TyphoonImgCommand : SimpleCommand(
         }
 
         //更新台风信息
-        var isError = false
-        Web.TyphoonFunc.getTyphoonData { status, data ->
-            if (!status) {
-                runBlocking { sendMessage("更新信息时出错：$data") }
-                isError = true
-            }
-        }
-        if (isError) {
+        val typhoonDataResponse = Web.TyphoonFunc.getTyphoonData()
+        if (!typhoonDataResponse.first) {
+            runBlocking { sendMessage("更新信息时出错：$${typhoonDataResponse.second}") }
             return
         }
 
@@ -228,15 +218,11 @@ class TyphoonForecastCommand : SimpleCommand(
         if (group.id !in Config.enableGroups) {
             return
         }
-        var isError = false
+
         //更新台风信息
-        Web.TyphoonFunc.getTyphoonData { status, data ->
-            if (!status) {
-                runBlocking { sendMessage("更新信息时出错：$data") }
-                isError = true
-            }
-        }
-        if (isError) {
+        val typhoonDataResponse = Web.TyphoonFunc.getTyphoonData()
+        if (!typhoonDataResponse.first) {
+            runBlocking { sendMessage("更新信息时出错：$${typhoonDataResponse.second}") }
             return
         }
 
@@ -457,31 +443,30 @@ class ConfigureCommand : CompositeCommand(
 
     @SubCommand("dev")
     suspend fun CommandSender.dev() {
-        Web.TyphoonFunc.getTyphoonData { status, err ->
-            if (status) {
-                runBlocking {
-                    sendMessage("Success")
-                    var message = ""
-                    val stormCount = Data.TyphoonData.count()
-                    var i = 0
-                    for ((code, data) in Data.TyphoonData) {
-                        i += 1
-                        message += "代号：$code\n"
-                            .plus("名字：${data.name}\n")
-                            .plus("地区：${data.basin}\n")
-                            .plus("位置：${data.longitude} ${data.latitude}\n")
-                            .plus("中心最大风速：${data.windSpeed}\n")
-                            .plus("中心最低气压：${data.pressure}\n")
-                            .plus("是否有卫星图片：${data.isSatelliteTarget}")
-                        if (i < stormCount) {
-                            message += "\n\n"
-                        }
+        val typhoonDataResponse = Web.TyphoonFunc.getTyphoonData()
+        if (typhoonDataResponse.first) {
+            runBlocking {
+                sendMessage("Success")
+                var message = ""
+                val stormCount = Data.TyphoonData.count()
+                var i = 0
+                for ((code, data) in Data.TyphoonData) {
+                    i += 1
+                    message += "代号：$code\n"
+                        .plus("名字：${data.name}\n")
+                        .plus("地区：${data.basin}\n")
+                        .plus("位置：${data.longitude} ${data.latitude}\n")
+                        .plus("中心最大风速：${data.windSpeed}\n")
+                        .plus("中心最低气压：${data.pressure}\n")
+                        .plus("是否有卫星图片：${data.isSatelliteTarget}")
+                    if (i < stormCount) {
+                        message += "\n\n"
                     }
-                    sendMessage(message)
                 }
-            } else {
-                runBlocking { sendMessage("Err: $err") }
+                sendMessage(message)
             }
+        } else {
+            runBlocking { sendMessage("Err: $${typhoonDataResponse.second}") }
         }
     }
 }

@@ -13,12 +13,11 @@ fun onStart() {
                 logger.info { "获取Cookie时出错：$err" }
             } else {
                 logger.info { "已重置Cookie" }
-                Web.TyphoonFunc.getTyphoonData { status, data ->
-                    if (status) {
-                        logger.info { "已加载台风信息" }
-                    } else {
-                        logger.info { "台风信息加载失败：$data" }
-                    }
+                val typhoonDataResponse = Web.TyphoonFunc.getTyphoonData()
+                if (typhoonDataResponse.first) {
+                    logger.info { "已加载台风信息" }
+                } else {
+                    logger.info { "台风信息加载失败：$${typhoonDataResponse.second}" }
                 }
             }
         }

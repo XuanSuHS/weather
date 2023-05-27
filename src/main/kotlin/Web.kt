@@ -390,12 +390,9 @@ object Web {
 
         fun getTyphoon(callback: (Boolean, String?) -> Unit) {
             //TODO:重写：综合不同机构的预报，加上卫星图片
-            getTyphoonData { status, data ->
-                if (status) {
-
-                } else {
-                    callback(false, data)
-                }
+            val typhoonDataResponse = getTyphoonData()
+            if (!typhoonDataResponse.first) {
+                callback(false, typhoonDataResponse.second)
             }
         }
 
@@ -446,7 +443,7 @@ object Web {
         //基于EasterlyWave
         //存在台风时回调true和台风个数
         //不存在台风时
-        fun getTyphoonData(callback: (Boolean, String?) -> Unit) {
+        fun getTyphoonData(): Pair<Boolean, String> {
             val mediaType = "application/json;charset=utf-8".toMediaTypeOrNull()
             val requestBody = "".toRequestBody(mediaType)
             val request = Request.Builder()
@@ -459,64 +456,62 @@ object Web {
                 .post(requestBody)
                 .build()
 
-            client.newCall(request).enqueue(object : Callback {
-                override fun onFailure(call: Call, e: IOException) {
-                    // 请求失败时的回调
-                    callback(false, e.message)
-                }
+            val returnData: Pair<Boolean, String>
+            val response: Response
+            try {
+                response = client.newCall(request).execute()
+            } catch (e: IOException) {
+                returnData = Pair(false, "${e.message}")
+                return returnData
+            }
 
-                override fun onResponse(call: Call, response: Response) {
-                    // 请求成功时的回调
-                    response.use {
-                        if (response.isSuccessful) {
-                            if (response.body != null) {
-                                Data.TyphoonData.clear()
-                                val responseData = response.body!!.string()
-                                val typhoonData = JsonParser.parseString(responseData).asJsonObject
-                                //设置 需要关注的台风
-                                Data.typhoonFocus = typhoonData.get("focus").toString().replace("\"", "")
+            if (response.isSuccessful) {
+                if (response.body != null) {
+                    Data.TyphoonData.clear()
+                    val responseData = response.body!!.string()
+                    val typhoonData = JsonParser.parseString(responseData).asJsonObject
+                    //设置 需要关注的台风
+                    Data.typhoonFocus = typhoonData.get("focus").toString().replace("\"", "")
 
-                                //详细台风信息
-                                val stormsArray = typhoonData.get("storms").asJsonArray
-                                val stormCount = stormsArray.size()
-                                //如果没台风，直接回调
-                                if (stormCount == 0) {
-                                    callback(false, "当前无台风")
-                                    return
-                                }
-
-                                for (i in 0 until stormCount) {
-                                    val stormData = stormsArray.get(i).asJsonObject
-                                    val code = stormData.get("code").toString().replace("\"", "")
-                                    val name = stormData.get("name").toString().replace("\"", "")
-                                    val basin = stormData.get("basin").toString().replace("\"", "")
-                                    val longitude = stormData.get("lonstr").toString().replace("\"", "")
-                                    val latitude = stormData.get("latstr").toString().replace("\"", "")
-                                    val windSpeed = stormData.get("wind").toString().replace("\"", "").plus(" Kt")
-                                    val pressure = stormData.get("pressure").toString().replace("\"", "").plus(" hPa")
-                                    val isSatelliteTarget =
-                                        stormData.get("is_target").toString().replace("\"", "").toBoolean()
-                                    Data.TyphoonData[code] = Data.TyphoonDataClass(
-                                        name,
-                                        basin,
-                                        longitude,
-                                        latitude,
-                                        windSpeed,
-                                        pressure,
-                                        isSatelliteTarget
-                                    )
-                                }
-                                callback(true, "")
-                            } else {
-                                callback(false, "返回内容为空")
-                            }
-
-                        } else {
-                            callback(true, response.code.toString())
-                        }
+                    //详细台风信息
+                    val stormsArray = typhoonData.get("storms").asJsonArray
+                    val stormCount = stormsArray.size()
+                    //如果没台风，直接回调
+                    if (stormCount == 0) {
+                        returnData = Pair(false, "当前无台风")
+                        return returnData
                     }
+
+                    for (i in 0 until stormCount) {
+                        val stormData = stormsArray.get(i).asJsonObject
+                        val code = stormData.get("code").toString().replace("\"", "")
+                        val name = stormData.get("name").toString().replace("\"", "")
+                        val basin = stormData.get("basin").toString().replace("\"", "")
+                        val longitude = stormData.get("lonstr").toString().replace("\"", "")
+                        val latitude = stormData.get("latstr").toString().replace("\"", "")
+                        val windSpeed = stormData.get("wind").toString().replace("\"", "").plus(" Kt")
+                        val pressure = stormData.get("pressure").toString().replace("\"", "").plus(" hPa")
+                        val isSatelliteTarget =
+                            stormData.get("is_target").toString().replace("\"", "").toBoolean()
+                        Data.TyphoonData[code] = Data.TyphoonDataClass(
+                            name,
+                            basin,
+                            longitude,
+                            latitude,
+                            windSpeed,
+                            pressure,
+                            isSatelliteTarget
+                        )
+                    }
+                    returnData = Pair(true, "")
+                } else {
+                    returnData = Pair(false, "返回内容为空")
                 }
-            })
+
+            } else {
+                returnData = Pair(false, response.code.toString())
+            }
+            return returnData
         }
 
 
@@ -559,40 +554,38 @@ object Web {
                 return
             }
 
-            getSSTbyRTOFSUrl { time, urlErr ->
-                if (urlErr == null) {
-                    //图片URL获取成功
-                    //根据URL信息获取图片文件
-                    val url = "https://www.easterlywave.com/media/typhoon/sst/$time/$area.png"
-                    val imageName = "$time-$area.png"
-                    if (imageFolder.resolve(imageName).exists()) {
-                        callback(imageName, null)
-                        return@getSSTbyRTOFSUrl
-                    } else {
-                        getPic(url, imageName) { picErr ->
-                            if (picErr == null) {
-                                //图片文件获取成功
-                                //返回图片信息供上传
-                                callback(imageName, null)
-                                return@getPic
-                            } else {
-                                //图片文件获取失败
-                                //返回错误信息
-                                callback(null, "下载图片时出错：$picErr")
-                                return@getPic
-                            }
+            val getSSTByRTOFSURLResponse = getSSTbyRTOFSUrl()
+            if (getSSTByRTOFSURLResponse.first) {
+                val time = getSSTByRTOFSURLResponse.second
+                //图片URL获取成功
+                //根据URL信息获取图片文件
+                val url = "https://www.easterlywave.com/media/typhoon/sst/$time/$area.png"
+                val imageName = "$time-$area.png"
+                if (imageFolder.resolve(imageName).exists()) {
+                    callback(imageName, null)
+                } else {
+                    getPic(url, imageName) { picErr ->
+                        if (picErr == null) {
+                            //图片文件获取成功
+                            //返回图片信息供上传
+                            callback(imageName, null)
+                            return@getPic
+                        } else {
+                            //图片文件获取失败
+                            //返回错误信息
+                            callback(null, "下载图片时出错：$picErr")
+                            return@getPic
                         }
                     }
-                } else {
-                    //图片URL获取失败
-                    //返回错误信息
-                    callback(null, "获取URL时出错：$urlErr")
-                    return@getSSTbyRTOFSUrl
                 }
+            } else {
+                //图片URL获取失败
+                //返回错误信息
+                callback(null, "获取URL时出错：${getSSTByRTOFSURLResponse.second}")
             }
         }
 
-        private fun getSSTbyRTOFSUrl(callback: (String, String?) -> Unit) {
+        private fun getSSTbyRTOFSUrl(): Pair<Boolean, String> {
 
             val mediaType = "application/json;charset=utf-8".toMediaTypeOrNull()
             val requestBody = "".toRequestBody(mediaType)
@@ -606,28 +599,28 @@ object Web {
                 .post(requestBody)
                 .build()
 
-            client.newCall(request).enqueue(object : Callback {
-                override fun onFailure(call: Call, e: IOException) {
-                    // 请求失败时的回调
-                    callback("", e.message)
-                }
+            val returnData: Pair<Boolean, String>
+            val response: Response
+            try {
+                response = client.newCall(request).execute()
+            } catch (e: IOException) {
 
-                override fun onResponse(call: Call, response: Response) {
-                    // 请求成功时的回调
-                    response.use {
-                        if (response.isSuccessful) {
-                            val body = response.body!!.string()
-                            val times =
-                                JsonParser.parseString(body).asJsonObject
-                                    .get("times").asJsonArray
-                                    .get(0).toString().replace("\"", "")
-                            callback(times, null)
-                        } else {
-                            callback("", response.code.toString())
-                        }
-                    }
-                }
-            })
+                returnData = Pair(false, "${e.message}")
+                return returnData
+            }
+
+            returnData = if (response.isSuccessful) {
+                val body = response.body!!.string()
+                val times =
+                    JsonParser.parseString(body).asJsonObject
+                        .get("times").asJsonArray
+                        .get(0).toString().replace("\"", "")
+                Pair(true, times)
+            } else {
+                Pair(false, response.code.toString())
+            }
+
+            return returnData
         }
     }
 }

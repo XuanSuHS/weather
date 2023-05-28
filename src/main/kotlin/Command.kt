@@ -409,12 +409,11 @@ class ConfigureCommand : CompositeCommand(
 
     @SubCommand("resetCookie")
     suspend fun CommandSender.resetCookie() {
-        Web.getCookie { err ->
-            if (err == null) {
-                runBlocking { sendMessage("Cookie更新完毕") }
-            } else {
-                runBlocking { sendMessage("Cookie更新时出错：$err") }
-            }
+        val getCookieResult = Web.getCookie()
+        if (getCookieResult.first) {
+            runBlocking { sendMessage("Cookie更新完毕") }
+        } else {
+            runBlocking { sendMessage("Cookie更新时出错：${getCookieResult.second}") }
         }
     }
 

@@ -108,8 +108,8 @@ object Web {
     }
 
     //获取Cookie
-    fun getCookie(callback: (String?) -> Unit) {
-
+    fun getCookie(): Pair<Boolean, String> {
+        var returnData: Pair<Boolean, String>
         //获取Cookie
         val request = Request.Builder()
             .url("https://www.easterlywave.com/weather")
@@ -118,33 +118,24 @@ object Web {
             .get()
             .build()
 
-        client.newCall(request).enqueue(object : Callback {
-            override fun onFailure(call: Call, e: IOException) {
-                // 请求失败时的回调
-                callback(e.message)
-                return
-            }
-
-            override fun onResponse(call: Call, response: Response) {
-                // 请求成功时的回调
-                response.use {
-                    if (response.isSuccessful) {
-                        //设置Cookie
-                        saveData.webCookie = if (response.header("Set-Cookie") != null)
-                            (response.header("Set-Cookie")!!)
-                        else {
-                            "null"
-                        }
-                        saveData.webCookieValue = saveData.webCookie.split(";")[0].replace("csrftoken=", "")
-                        callback(null)
-                        return
-                    } else {
-                        callback(response.code.toString())
-                        return
-                    }
+        try {
+            val response = client.newCall(request).execute()
+            if (response.isSuccessful) {
+                //设置Cookie
+                saveData.webCookie = if (response.header("Set-Cookie") != null)
+                    (response.header("Set-Cookie")!!)
+                else {
+                    "null"
                 }
+                saveData.webCookieValue = saveData.webCookie.split(";")[0].replace("csrftoken=", "")
+                returnData = Pair(true, "")
+            } else {
+                returnData = Pair(false, response.code.toString())
             }
-        })
+        } catch (e: IOException) {
+            returnData = Pair(false, "${e.message}")
+        }
+        return returnData
     }
 
     //获取图片

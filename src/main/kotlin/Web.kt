@@ -104,6 +104,7 @@ object Web {
                 override fun onResponse(call: Call, response: Response) {
                     // 请求成功时的回调
                     callback(true)
+                    response.close()
                     return
                 }
             })
@@ -135,6 +136,7 @@ object Web {
             } else {
                 returnData = Pair(false, response.code.toString())
             }
+            response.close()
         } catch (e: IOException) {
             returnData = Pair(false, "${e.message}")
         }
@@ -144,7 +146,7 @@ object Web {
     //获取图片
     private fun getPic(url: String, imageName: String): Pair<Boolean, String> {
 
-        val returnData: Pair<Boolean, String>
+        var returnData: Pair<Boolean, String>
         //初始化文件获取相关变量
         val file = File(imageFolderPath, imageName)
         val path = Paths.get(file.path)
@@ -156,20 +158,21 @@ object Web {
             .addHeader("Connection", "keep-alive")
             .build()
 
-        returnData = try {
+        try {
             val response = client.newCall(request).execute()
             if (response.isSuccessful) {
                 if (response.body?.byteStream() != null) {
                     inputStream = response.body!!.byteStream()
                     Files.copy(inputStream, path, StandardCopyOption.REPLACE_EXISTING)
                     inputStream.close()
-                    Pair(true, "")
+                    returnData = Pair(true, "")
                 } else {
-                    Pair(false, "返回内容为空")
+                    returnData = Pair(false, "返回内容为空")
                 }
             } else {
-                Pair(false, response.code.toString())
+                returnData = Pair(false, response.code.toString())
             }
+            response.close()
         } catch (e: IOException) {
             returnData = Pair(false, "${e.message}")
             return returnData
@@ -184,7 +187,7 @@ object Web {
         //搜索成功时返回true与城市代号
         //搜索失败时返回false与错误原因
         fun getCityNumber(city: String, number: String): Pair<Boolean, String> {
-            var returnData: Pair<Boolean, String>
+            val returnData: Pair<Boolean, String>
             val mediaType = "application/json;charset=utf-8".toMediaTypeOrNull()
             val requestBody = "{\"content\":\"$city\"}".toRequestBody(mediaType)
             val requestForCityNumber = Request.Builder()
@@ -197,77 +200,72 @@ object Web {
                 .post(requestBody)
                 .build()
 
-            returnData = try {
-                val response = client.newCall(requestForCityNumber).execute()
-                if (response.isSuccessful) {
-                    var responseJSON = JsonObject()
+            val response = client.newCall(requestForCityNumber).execute()
+            if (response.isSuccessful) {
+                var responseJSON = JsonObject()
 
-                    try {
-                        responseJSON = JsonParser.parseString(response.body!!.string()).asJsonObject
-                    } catch (e: JsonParseException) {
-                        if (e.message != null) {
-                            //获得非标准JSON，报错返回
-                            returnData = Pair(false, "返回结果非标准JSON，请检查请求是否有误")
-                            return returnData
-                        }
-                    }
-                    //status表搜索结果是否存在
-                    val status = responseJSON.get("status").toString()
-
-                    //搜索结果不存在时返回错误
-                    if (status == "1") {
-                        returnData = Pair(false, "目标城市不存在")
+                try {
+                    responseJSON = JsonParser.parseString(response.body!!.string()).asJsonObject
+                    response.close()
+                } catch (e: JsonParseException) {
+                    if (e.message != null) {
+                        //获得非标准JSON，报错返回
+                        returnData = Pair(false, "返回结果非标准JSON，请检查请求是否有误")
                         return returnData
                     }
-
-                    //搜索结果
-                    val suggestions = responseJSON.get("suggestions").asJsonArray
-
-                    val suggestionNo = if (suggestions.size() > 1) {
-                        when (val inputSuggestionNo = number.toIntOrNull()) {
-                            null -> {
-                                var message = "\n找到多个备选项"
-                                for (i in 0 until suggestions.size()) {
-                                    message += "\n${i + 1}.${
-                                        suggestions.get(i).asJsonObject.get("value").toString().replace("\"", "")
-                                    }"
-                                }
-                                message += "\n输入 /weather $city <编号> 来选择您想要的结果"
-                                returnData = Pair(false, message)
-                                return returnData
-                            }
-
-                            !in 1..suggestions.size() -> {
-                                var message = "找不到该城市，请检查输入是否正确"
-                                message += "\n找到多个备选项"
-                                for (i in 0 until suggestions.size()) {
-                                    message += "\n${i + 1}.${
-                                        suggestions.get(i).asJsonObject.get("value").toString().replace("\"", "")
-                                    }"
-                                }
-                                message += "\n输入 /weather $city <编号> 来选择您想要的结果"
-                                returnData = Pair(false, message)
-                                return returnData
-                            }
-
-                            else -> {
-                                inputSuggestionNo - 1
-                            }
-                        }
-                    } else {
-                        0
-                    }
-
-                    //搜索结果唯一时返回城市WMO代号
-                    val cityNumber =
-                        suggestions.get(suggestionNo).asJsonObject.get("data").toString().replace("\"", "").toInt()
-                    Pair(true, cityNumber.toString())
-                } else {
-                    Pair(false, response.code.toString())
                 }
-            } catch (e: IOException) {
-                returnData = Pair(false, "${e.message}")
-                return returnData
+                //status表搜索结果是否存在
+                val status = responseJSON.get("status").toString()
+
+                //搜索结果不存在时返回错误
+                if (status == "1") {
+                    returnData = Pair(false, "目标城市不存在")
+                    return returnData
+                }
+
+                //搜索结果
+                val suggestions = responseJSON.get("suggestions").asJsonArray
+
+                val suggestionNo = if (suggestions.size() > 1) {
+                    when (val inputSuggestionNo = number.toIntOrNull()) {
+                        null -> {
+                            var message = "\n找到多个备选项"
+                            for (i in 0 until suggestions.size()) {
+                                message += "\n${i + 1}.${
+                                    suggestions.get(i).asJsonObject.get("value").toString().replace("\"", "")
+                                }"
+                            }
+                            message += "\n输入 /weather $city <编号> 来选择您想要的结果"
+                            returnData = Pair(false, message)
+                            return returnData
+                        }
+
+                        !in 1..suggestions.size() -> {
+                            var message = "找不到该城市，请检查输入是否正确"
+                            message += "\n找到多个备选项"
+                            for (i in 0 until suggestions.size()) {
+                                message += "\n${i + 1}.${
+                                    suggestions.get(i).asJsonObject.get("value").toString().replace("\"", "")
+                                }"
+                            }
+                            message += "\n输入 /weather $city <编号> 来选择您想要的结果"
+                            returnData = Pair(false, message)
+                            return returnData
+                        }
+
+                        else -> {
+                            inputSuggestionNo - 1
+                        }
+                    }
+                } else {
+                    0
+                }
+                //搜索结果唯一时返回城市WMO代号
+                val cityNumber =
+                    suggestions.get(suggestionNo).asJsonObject.get("data").toString().replace("\"", "").toInt()
+                returnData = Pair(true, cityNumber.toString())
+            } else {
+                returnData = Pair(false, response.code.toString())
             }
             return returnData
         }
@@ -310,7 +308,7 @@ object Web {
 
         //获取天气图片URL
         private fun getWeatherURL(cityNumber: Int): Pair<Boolean, String> {
-            val returnData: Pair<Boolean, String>
+            var returnData: Pair<Boolean, String>
             //获取图片URL的文件地址部分
             val mediaType = "application/json;charset=utf-8".toMediaTypeOrNull()
             val requestBody = "{\"content\":\"$cityNumber\"}".toRequestBody(mediaType)
@@ -324,17 +322,18 @@ object Web {
                 .post(requestBody)
                 .build()
 
-            returnData = try {
+            try {
                 val response = client.newCall(requestForPicURL).execute()
                 if (response.isSuccessful) {
                     val picURI =
                         JsonParser.parseString(response.body?.string()).asJsonObject.get("src").toString()
                             .replace("\"", "")
-
+                    response.close()
                     val weatherPicURL = "https://www.easterlywave.com$picURI"
-                    Pair(true, weatherPicURL)
+                    returnData = Pair(true, weatherPicURL)
                 } else {
-                    Pair(false, response.code.toString())
+                    returnData = Pair(false, response.code.toString())
+                    response.close()
                 }
             } catch (e: IOException) {
                 returnData = Pair(false, "${e.message}")
@@ -433,7 +432,7 @@ object Web {
                 .post(requestBody)
                 .build()
 
-            returnData = try {
+            try {
                 val response = client.newCall(requestForURL).execute()
                 if (response.isSuccessful) {
                     val time =
@@ -441,9 +440,11 @@ object Web {
                             .get("data").asJsonArray
                             .get(0).asJsonObject
                             .get("basetime").toString().replace("\"", "")
-                    Pair(true, time)
+                    returnData = Pair(true, time)
+                    response.close()
                 } else {
-                    Pair(false, response.code.toString())
+                    returnData = Pair(false, response.code.toString())
+                    response.close()
                 }
             } catch (e: IOException) {
                 Pair(false, "${e.message}")
@@ -518,12 +519,15 @@ object Web {
                         )
                     }
                     returnData = Pair(true, "")
+                    response.close()
                 } else {
                     returnData = Pair(false, "返回内容为空")
+                    response.close()
                 }
 
             } else {
                 returnData = Pair(false, response.code.toString())
+                response.close()
             }
             return returnData
         }
@@ -607,22 +611,22 @@ object Web {
             try {
                 response = client.newCall(request).execute()
             } catch (e: IOException) {
-
                 returnData = Pair(false, "${e.message}")
                 return returnData
             }
 
-            returnData = if (response.isSuccessful) {
+            if (response.isSuccessful) {
                 val body = response.body!!.string()
                 val times =
                     JsonParser.parseString(body).asJsonObject
                         .get("times").asJsonArray
                         .get(0).toString().replace("\"", "")
-                Pair(true, times)
+                returnData = Pair(true, times)
+                response.close()
             } else {
-                Pair(false, response.code.toString())
+                returnData = Pair(false, response.code.toString())
+                response.close()
             }
-
             return returnData
         }
     }

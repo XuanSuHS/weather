@@ -12,7 +12,7 @@ object weatherMain : KotlinPlugin(
     JvmPluginDescription(
         id = "top.xuansu.mirai.weather",
         name = "Weather",
-        version = "0.1.4-B4",
+        version = "0.1.4-B5",
     ) {
         author("XuanSu")
     }
@@ -40,7 +40,14 @@ object weatherMain : KotlinPlugin(
         //检查并创建图片储存文件夹
         imageFolder = dataFolder.resolve("img")
         when {
-            imageFolder.exists() -> logger.info("ImgFolder: ${imageFolder.path}")
+            imageFolder.exists() -> {
+                val fileDeleteResult = deleteFolderContents(imageFolder)
+                logger.info("ImgFolder: ${imageFolder.path}")
+                if (fileDeleteResult != 0) {
+                    logger.info { "Deleted $fileDeleteResult cached files" }
+                }
+            }
+
             else -> {
                 logger.info("Can't find img folder")
                 imageFolder.mkdirs()

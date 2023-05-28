@@ -148,12 +148,13 @@ object Web {
     }
 
     //获取图片
-    private fun getPic(url: String, imageName: String, callback: (String?) -> Unit) {
+    private fun getPic(url: String, imageName: String): Pair<Boolean, String> {
 
+        val returnData: Pair<Boolean, String>
         //初始化文件获取相关变量
         val file = File(imageFolderPath, imageName)
         val path = Paths.get(file.path)
-        var inputStream: InputStream
+        val inputStream: InputStream
 
         //创建Request
         val request = Request.Builder()
@@ -161,28 +162,25 @@ object Web {
             .addHeader("Connection", "keep-alive")
             .build()
 
-        client.newCall(request).enqueue(object : Callback {
-            //图片下载失败
-            override fun onFailure(call: Call, e: IOException) {
-                callback(e.message)
-            }
-
-            //图片下载成功
-            override fun onResponse(call: Call, response: Response) {
-                if (response.isSuccessful) {
-                    if (response.body?.byteStream() != null) {
-                        inputStream = response.body!!.byteStream()
-                        Files.copy(inputStream, path, StandardCopyOption.REPLACE_EXISTING)
-                        inputStream.close()
-                        callback(null)
-                    } else {
-                        callback("返回内容为空")
-                    }
+        returnData = try {
+            val response = client.newCall(request).execute()
+            if (response.isSuccessful) {
+                if (response.body?.byteStream() != null) {
+                    inputStream = response.body!!.byteStream()
+                    Files.copy(inputStream, path, StandardCopyOption.REPLACE_EXISTING)
+                    inputStream.close()
+                    Pair(true, "")
                 } else {
-                    callback(response.code.toString())
+                    Pair(false, "返回内容为空")
                 }
+            } else {
+                Pair(false, response.code.toString())
             }
-        })
+        } catch (e: IOException) {
+            returnData = Pair(false, "${e.message}")
+            return returnData
+        }
+        return returnData
     }
 
     //天气相关函数
@@ -271,16 +269,15 @@ object Web {
                             val weatherPicURL = "https://www.easterlywave.com$picURI"
                             val imageName = "$cityNumber.png"
                             //获取图片
-                            getPic(weatherPicURL, imageName) { picErr ->
-                                if (picErr == null) {
-                                    //图片文件获取成功
-                                    //返回图片信息供上传
-                                    callback(null, imageName)
-                                } else {
-                                    //图片文件获取失败
-                                    //返回错误代码
-                                    callback("下载图片时出错：$picErr", "")
-                                }
+                            val getPicResponse = getPic(weatherPicURL, imageName)
+                            if (getPicResponse.first) {
+                                //图片文件获取成功
+                                //返回图片信息供上传
+                                callback(null, imageName)
+                            } else {
+                                //图片文件获取失败
+                                //返回错误代码
+                                callback("下载图片时出错：${getPicResponse.second}", "")
                             }
                         } else {
                             //图片URL获取失败
@@ -388,23 +385,31 @@ object Web {
             return result
         }
 
-        fun getTyphoon(callback: (Boolean, String?) -> Unit) {
-            //TODO:重写：综合不同机构的预报，加上卫星图片
-            val typhoonDataResponse = getTyphoonData()
-            if (!typhoonDataResponse.first) {
-                callback(false, typhoonDataResponse.second)
+
+        fun getECForecast(code: String): Pair<Boolean, String> {
+            var returnData = Pair(false, "ERR")
+            val ecTimeResponse = getECTime()
+            if (!ecTimeResponse.first) {
+                returnData = Pair(false, ecTimeResponse.second)
+                return returnData
             }
+
+            val ecTime = ecTimeResponse.second
+            val ecURL = "https://www.easterlywave.com/media/typhoon/ensemble/$ecTime/$code.png"
+            val imageName = "ec-${ecTime}-${code}.png"
+            //val getPicResponse = getPic(url,imageName).
+            return Pair(true, ecURL)
         }
 
-        //获取台风图片URL
+        //获取EC预报时间
         //基于EasterlyWave
-        //回调值第一个为成功时数据
-        //第二个是出错时错误代码
-        private fun getECUrl(callback: (String?, String?) -> Unit) {
+        private fun getECTime(): Pair<Boolean, String> {
+
+            var returnData = Pair(false, "图片URL获取失败")
 
             val mediaType = "application/json;charset=utf-8".toMediaTypeOrNull()
             val requestBody = "".toRequestBody(mediaType)
-            val request = Request.Builder()
+            val requestForURL = Request.Builder()
                 .url("https://www.easterlywave.com/action/typhoon/ecens")
                 .header("Cookie", saveData.webCookie)
                 .addHeader("Content-Type", "application/json")
@@ -414,28 +419,23 @@ object Web {
                 .post(requestBody)
                 .build()
 
-            client.newCall(request).enqueue(object : Callback {
-                override fun onFailure(call: Call, e: IOException) {
-                    // 请求失败时的回调
-                    callback(null, e.message)
+            returnData = try {
+                val response = client.newCall(requestForURL).execute()
+                if (response.isSuccessful) {
+                    val time =
+                        JsonParser.parseString(response.body!!.string()).asJsonObject
+                            .get("data").asJsonArray
+                            .get(0).asJsonObject
+                            .get("basetime").toString().replace("\"", "")
+                    Pair(true, time)
+                } else {
+                    Pair(false, response.code.toString())
                 }
-
-                override fun onResponse(call: Call, response: Response) {
-                    // 请求成功时的回调
-                    response.use {
-                        if (response.isSuccessful) {
-                            val time =
-                                JsonParser.parseString(response.body!!.string()).asJsonObject
-                                    .get("data").asJsonArray
-                                    .get(0).asJsonObject
-                                    .get("basetime").toString().replace("\"", "")
-                            callback(time, null)
-                        } else {
-                            callback(null, response.code.toString())
-                        }
-                    }
-                }
-            })
+            } catch (e: IOException) {
+                Pair(false, "${e.message}")
+                return returnData
+            }
+            return returnData
         }
 
 
@@ -515,31 +515,39 @@ object Web {
         }
 
 
-        fun getTyphoonSatePic(code: String, picType: String, callback: (Boolean, String?) -> Unit) {
-            //查询图片类型是否存在
-            //TODO
-            //查询台风是否存在
-            if (!Data.TyphoonData.containsKey(code)) {
-                callback(false, "未找到$code")
-                return
+        fun getTyphoonSatePic(codeIn: String, picType: String): Pair<Boolean, String> {
+            val returnData: Pair<Boolean, String>
+
+            //检查台风代号可用性
+            val codeCheckResult = checkTyphoonCode(codeIn)
+            val code = when (codeCheckResult.first) {
+                true -> {
+                    codeCheckResult.second
+                }
+
+                false -> {
+                    returnData = Pair(false, codeCheckResult.second)
+                    return returnData
+                }
             }
 
             //是否有卫星图片
-            else if (!Data.TyphoonData[code]!!.isSatelliteTarget) {
-                callback(false, "此台风不存在卫星图片")
-                return
+            if (!Data.TyphoonData[code]!!.isSatelliteTarget) {
+                returnData = Pair(false, "此台风不存在卫星图片")
+                return returnData
             }
 
             //从Dapiya网站下载指定卫星图片
             val url = "https://data.dapiya.top/history/$code/$picType/${code}_${picType}.png"
             val imageName = "${code}_${picType}.png"
-            getPic(url, imageName) { err ->
-                if (err == null) {
-                    callback(true, imageName)
-                } else {
-                    callback(false, err)
-                }
+            val getPicResponse = getPic(url, imageName)
+            returnData = if (getPicResponse.first) {
+                Pair(true, imageName)
+            } else {
+                Pair(false, getPicResponse.second)
             }
+
+            return returnData
         }
     }
 
@@ -564,18 +572,15 @@ object Web {
                 if (imageFolder.resolve(imageName).exists()) {
                     callback(imageName, null)
                 } else {
-                    getPic(url, imageName) { picErr ->
-                        if (picErr == null) {
-                            //图片文件获取成功
-                            //返回图片信息供上传
-                            callback(imageName, null)
-                            return@getPic
-                        } else {
-                            //图片文件获取失败
-                            //返回错误信息
-                            callback(null, "下载图片时出错：$picErr")
-                            return@getPic
-                        }
+                    val getPicResponse = getPic(url, imageName)
+                    if (getPicResponse.first) {
+                        //图片文件获取成功
+                        //返回图片信息供上传
+                        callback(imageName, null)
+                    } else {
+                        //图片文件获取失败
+                        //返回错误信息
+                        callback(null, "下载图片时出错：${getPicResponse.second}")
                     }
                 }
             } else {

@@ -107,15 +107,14 @@ class TyphoonCommand : SimpleCommand(
             }
 
             val imgType = Config.defaultImgType
-            Web.TyphoonFunc.getTyphoonSatePic(typhoonCode, imgType) { status, data ->
-                if (status) {
-                    runBlocking {
-                        val img = imageFolder.resolve(data!!).uploadAsImage(group, "png")
-                        group.sendMessage(PlainText(message) + img)
-                    }
-                } else {
-                    runBlocking { sendMessage("下载图片时出错：$data") }
+            val getTyphoonSatePicResponse = Web.TyphoonFunc.getTyphoonSatePic(typhoonCode, imgType)
+            if (getTyphoonSatePicResponse.first) {
+                runBlocking {
+                    val img = imageFolder.resolve(getTyphoonSatePicResponse.second).uploadAsImage(group, "png")
+                    group.sendMessage(PlainText(message) + img)
                 }
+            } else {
+                runBlocking { sendMessage("下载图片时出错：${getTyphoonSatePicResponse.second}") }
             }
         }
     }
@@ -161,18 +160,6 @@ class TyphoonImgCommand : SimpleCommand(
             return
         }
 
-        //检查台风代号可用性
-        val codeCheckResult = Web.TyphoonFunc.checkTyphoonCode(codeIn)
-        val typhoonCode = when (codeCheckResult.first) {
-            true -> {
-                codeCheckResult.second
-            }
-
-            false -> {
-                sendMessage(codeCheckResult.second)
-                return
-            }
-        }
 
         //检查图片搜索类型可用性
         val imgTypeCheckResult = Web.TyphoonFunc.checkImgType(imageType)
@@ -187,15 +174,14 @@ class TyphoonImgCommand : SimpleCommand(
             }
         }
 
-        Web.TyphoonFunc.getTyphoonSatePic(typhoonCode, imgType) { status, data ->
-            if (status) {
-                runBlocking {
-                    val img = imageFolder.resolve(data!!).uploadAsImage(group, "png")
-                    group.sendMessage(img)
-                }
-            } else {
-                runBlocking { sendMessage("出错了：$data") }
+        val getSatePicResponse = Web.TyphoonFunc.getTyphoonSatePic(codeIn, imgType)
+        if (getSatePicResponse.first) {
+            runBlocking {
+                val img = imageFolder.resolve(getSatePicResponse.second).uploadAsImage(group, "png")
+                group.sendMessage(img)
             }
+        } else {
+            runBlocking { sendMessage("出错了：${getSatePicResponse.second}") }
         }
     }
 }
@@ -443,31 +429,7 @@ class ConfigureCommand : CompositeCommand(
 
     @SubCommand("dev")
     suspend fun CommandSender.dev() {
-        val typhoonDataResponse = Web.TyphoonFunc.getTyphoonData()
-        if (typhoonDataResponse.first) {
-            runBlocking {
-                sendMessage("Success")
-                var message = ""
-                val stormCount = Data.TyphoonData.count()
-                var i = 0
-                for ((code, data) in Data.TyphoonData) {
-                    i += 1
-                    message += "代号：$code\n"
-                        .plus("名字：${data.name}\n")
-                        .plus("地区：${data.basin}\n")
-                        .plus("位置：${data.longitude} ${data.latitude}\n")
-                        .plus("中心最大风速：${data.windSpeed}\n")
-                        .plus("中心最低气压：${data.pressure}\n")
-                        .plus("是否有卫星图片：${data.isSatelliteTarget}")
-                    if (i < stormCount) {
-                        message += "\n\n"
-                    }
-                }
-                sendMessage(message)
-            }
-        } else {
-            runBlocking { sendMessage("Err: $${typhoonDataResponse.second}") }
-        }
+
     }
 }
 
@@ -477,19 +439,22 @@ class DevCommand : SimpleCommand(
 ) {
     @Handler
     suspend fun CommandSender.handle(code: String, picType: String) {
-        if (!Data.TyphoonData.containsKey(code)) {
-            sendMessage("err")
-            return
+
+        /*
+        val getTyphoonSatePicResponse = Web.TyphoonFunc.getTyphoonSatePic(code, picType.uppercase())
+        if (getTyphoonSatePicResponse.first) {
+            runBlocking { sendMessage("Finished: $${getTyphoonSatePicResponse.second}") }
         } else {
-            sendMessage("找到了$code")
+            runBlocking { sendMessage("Err: ${getTyphoonSatePicResponse.second}") }
         }
 
-        Web.TyphoonFunc.getTyphoonSatePic(code, picType.uppercase()) { status, data ->
-            if (status) {
-                runBlocking { sendMessage("Finished: $data") }
-            } else {
-                runBlocking { sendMessage("Err: $data") }
-            }
+         */
+
+        val getECResponse = Web.TyphoonFunc.getECForecast(code)
+        if (getECResponse.first) {
+            sendMessage("GOOD:${getECResponse.second}")
+        } else {
+            sendMessage("ERR:${getECResponse.second}")
         }
     }
 }

@@ -262,28 +262,25 @@ object Web {
                     val cityNumber = data.toInt()
 
                     //获取城市图片URL
-                    getWeatherURL(cityNumber) { picURI, urlErr ->
-                        if (urlErr == null) {
-                            //图片URL获取成功
-                            //返回图片信息
-                            val weatherPicURL = "https://www.easterlywave.com$picURI"
-                            val imageName = "$cityNumber.png"
-                            //获取图片
-                            val getPicResponse = getPic(weatherPicURL, imageName)
-                            if (getPicResponse.first) {
-                                //图片文件获取成功
-                                //返回图片信息供上传
-                                callback(null, imageName)
-                            } else {
-                                //图片文件获取失败
-                                //返回错误代码
-                                callback("下载图片时出错：${getPicResponse.second}", "")
-                            }
+                    val getWeatherURLResponse = getWeatherURL(cityNumber)
+                    if (getWeatherURLResponse.first) {
+                        val weatherPicURL = getWeatherURLResponse.second
+                        val imageName = "$cityNumber.png"
+                        //获取图片
+                        val getPicResponse = getPic(weatherPicURL, imageName)
+                        if (getPicResponse.first) {
+                            //图片文件获取成功
+                            //返回图片信息供上传
+                            callback(null, imageName)
                         } else {
-                            //图片URL获取失败
+                            //图片文件获取失败
                             //返回错误代码
-                            callback("获取URL时出错：$urlErr", "")
+                            callback("下载图片时出错：${getPicResponse.second}", "")
                         }
+                    } else {
+                        //图片URL获取失败
+                        //返回错误代码
+                        callback("获取URL时出错：${getWeatherURLResponse.second}", "")
                     }
                 } else {
                     //执行时出错
@@ -295,8 +292,8 @@ object Web {
         //获取天气图片URL
         //callback第一个为回调数据，在此为图片URI
         //callback第二个为错误信息，无错误时为null
-        private fun getWeatherURL(cityNumber: Int, callback: (String, String?) -> Unit) {
-
+        private fun getWeatherURL(cityNumber: Int): Pair<Boolean, String> {
+            val returnData: Pair<Boolean, String>
             //获取图片URL的文件地址部分
             val mediaType = "application/json;charset=utf-8".toMediaTypeOrNull()
             val requestBody = "{\"content\":\"$cityNumber\"}".toRequestBody(mediaType)
@@ -310,30 +307,23 @@ object Web {
                 .post(requestBody)
                 .build()
 
-            //处理返回的JSON
-            client.newCall(requestForPicURL).enqueue(object : Callback {
-                override fun onFailure(call: Call, e: IOException) {
-                    // 请求失败时的回调
-                    callback("null", e.message)
-                    return
-                }
+            returnData = try {
+                val response = client.newCall(requestForPicURL).execute()
+                if (response.isSuccessful) {
+                    val picURI =
+                        JsonParser.parseString(response.body?.string()).asJsonObject.get("src").toString()
+                            .replace("\"", "")
 
-                override fun onResponse(call: Call, response: Response) {
-                    // 请求成功时的回调
-                    response.use {
-                        if (response.isSuccessful) {
-                            val weatherPicURI =
-                                JsonParser.parseString(response.body?.string()).asJsonObject.get("src").toString()
-                                    .replace("\"", "")
-                            callback(weatherPicURI, null)
-                            return
-                        } else {
-                            callback("null", response.code.toString())
-                            return
-                        }
-                    }
+                    val weatherPicURL = "https://www.easterlywave.com$picURI"
+                    Pair(true, weatherPicURL)
+                } else {
+                    Pair(false, response.code.toString())
                 }
-            })
+            } catch (e: IOException) {
+                returnData = Pair(false, "${e.message}")
+                return returnData
+            }
+            return returnData
         }
     }
 

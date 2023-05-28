@@ -27,15 +27,15 @@ class WeatherCommand : SimpleCommand(
                 return
             }
 
-            Web.CityWeatherFunc.getWeather(city) { err, imageName ->
-                if (err != null) {
-                    runBlocking { group.sendMessage(err) }
-                } else {
-                    runBlocking {
-                        val img = imageFolder.resolve(imageName).uploadAsImage(group, "png")
-                        group.sendMessage(img)
-                    }
+            val getWeatherResponse = Web.CityWeatherFunc.getWeather(city)
+            if (getWeatherResponse.first) {
+                runBlocking {
+                    val imageName = getWeatherResponse.second
+                    val img = imageFolder.resolve(imageName).uploadAsImage(group, "png")
+                    group.sendMessage(img)
                 }
+            } else {
+                runBlocking { group.sendMessage(getWeatherResponse.second) }
             }
         }
     }
@@ -70,14 +70,9 @@ class TyphoonCommand : SimpleCommand(
             }
 
             //更新台风信息
-            var isError = false
-            Web.TyphoonFunc.getTyphoonData { status, data ->
-                if (!status) {
-                    runBlocking { sendMessage("更新信息时出错：$data") }
-                    isError = true
-                }
-            }
-            if (isError) {
+            val typhoonDataResponse = Web.TyphoonFunc.getTyphoonData()
+            if (!typhoonDataResponse.first) {
+                runBlocking { sendMessage("更新信息时出错：$${typhoonDataResponse.second}") }
                 return
             }
 
@@ -112,15 +107,14 @@ class TyphoonCommand : SimpleCommand(
             }
 
             val imgType = Config.defaultImgType
-            Web.TyphoonFunc.getTyphoonSatePic(typhoonCode, imgType) { status, data ->
-                if (status) {
-                    runBlocking {
-                        val img = imageFolder.resolve(data!!).uploadAsImage(group, "png")
-                        group.sendMessage(PlainText(message) + img)
-                    }
-                } else {
-                    runBlocking { sendMessage("下载图片时出错：$data") }
+            val getTyphoonSatePicResponse = Web.TyphoonFunc.getTyphoonSatePic(typhoonCode, imgType)
+            if (getTyphoonSatePicResponse.first) {
+                runBlocking {
+                    val img = imageFolder.resolve(getTyphoonSatePicResponse.second).uploadAsImage(group, "png")
+                    group.sendMessage(PlainText(message) + img)
                 }
+            } else {
+                runBlocking { sendMessage("下载图片时出错：${getTyphoonSatePicResponse.second}") }
             }
         }
     }
@@ -160,14 +154,9 @@ class TyphoonImgCommand : SimpleCommand(
         }
 
         //更新台风信息
-        var isError = false
-        Web.TyphoonFunc.getTyphoonData { status, data ->
-            if (!status) {
-                runBlocking { sendMessage("更新信息时出错：$data") }
-                isError = true
-            }
-        }
-        if (isError) {
+        val typhoonDataResponse = Web.TyphoonFunc.getTyphoonData()
+        if (!typhoonDataResponse.first) {
+            runBlocking { sendMessage("更新信息时出错：$${typhoonDataResponse.second}") }
             return
         }
 
@@ -197,15 +186,20 @@ class TyphoonImgCommand : SimpleCommand(
             }
         }
 
-        Web.TyphoonFunc.getTyphoonSatePic(typhoonCode, imgType) { status, data ->
-            if (status) {
-                runBlocking {
-                    val img = imageFolder.resolve(data!!).uploadAsImage(group, "png")
-                    group.sendMessage(img)
-                }
-            } else {
-                runBlocking { sendMessage("出错了：$data") }
+        if (!Data.TyphoonData[typhoonCode]!!.isSatelliteTarget) {
+            val message = "该台风无图片"
+            sendMessage(message)
+            return
+        }
+
+        val getSatePicResponse = Web.TyphoonFunc.getTyphoonSatePic(typhoonCode, imgType)
+        if (getSatePicResponse.first) {
+            runBlocking {
+                val img = imageFolder.resolve(getSatePicResponse.second).uploadAsImage(group, "png")
+                group.sendMessage(img)
             }
+        } else {
+            runBlocking { sendMessage("出错了：${getSatePicResponse.second}") }
         }
     }
 }
@@ -217,7 +211,7 @@ class TyphoonForecastCommand : SimpleCommand(
     secondaryNames = arrayOf("台风预报", "ty-fore", "ty-forecast", "tyFore")
 ) {
     @Handler
-    suspend fun CommandSender.handle(code: String = "", imageType: String = "") {
+    suspend fun CommandSender.handle(code: String = "") {
         if (getGroupOrNull() == null) {
             sendMessage("请在群聊下执行")
             return
@@ -228,15 +222,11 @@ class TyphoonForecastCommand : SimpleCommand(
         if (group.id !in Config.enableGroups) {
             return
         }
-        var isError = false
+
         //更新台风信息
-        Web.TyphoonFunc.getTyphoonData { status, data ->
-            if (!status) {
-                runBlocking { sendMessage("更新信息时出错：$data") }
-                isError = true
-            }
-        }
-        if (isError) {
+        val typhoonDataResponse = Web.TyphoonFunc.getTyphoonData()
+        if (!typhoonDataResponse.first) {
+            runBlocking { sendMessage("更新信息时出错：$${typhoonDataResponse.second}") }
             return
         }
 
@@ -252,7 +242,16 @@ class TyphoonForecastCommand : SimpleCommand(
                 return
             }
         }
-        //TODO:预报
+
+        val getECForecastResult = Web.TyphoonFunc.getECForecast(typhoonCode)
+        if (getECForecastResult.first) {
+            runBlocking {
+                val img = imageFolder.resolve(getECForecastResult.second).uploadAsImage(group, "png")
+                group.sendMessage(img)
+            }
+        } else {
+            runBlocking { group.sendMessage("出错了：${getECForecastResult.second}") }
+        }
     }
 }
 
@@ -287,15 +286,14 @@ class SeaSurfaceTempCommand : SimpleCommand(
                 }
             }
 
-            Web.SSTFunc.getSSTbyRTOFS(area) { imageName, err ->
-                if (err == null) {
-                    runBlocking {
-                        val img = imageFolder.resolve(imageName!!).uploadAsImage(group, "png")
-                        group.sendMessage(img)
-                    }
-                } else {
-                    runBlocking { sendMessage(err) }
+            val getSSTResponse = Web.SSTFunc.getSSTbyRTOFS(area)
+            if (getSSTResponse.first) {
+                runBlocking {
+                    val img = imageFolder.resolve(getSSTResponse.second).uploadAsImage(group, "png")
+                    group.sendMessage(img)
                 }
+            } else {
+                runBlocking { sendMessage(getSSTResponse.second) }
             }
         }
     }
@@ -384,13 +382,17 @@ class ConfigureCommand : CompositeCommand(
     @SubCommand("city")
     suspend fun CommandSender.setDefaultCity(arg: String) {
         if (getGroupOrNull() != null) {
-            val groupID = getGroupOrNull()!!.id
-            Web.CityWeatherFunc.getCityNumber(arg) { isSuccessful, data ->
-                if (isSuccessful) {
-                    runBlocking { sendMessage("已将群" + groupID + "的默认城市更改为" + arg) }
-                } else {
-                    runBlocking { sendMessage("出错了：$data") }
+            val group = getGroupOrNull()!!
+
+            val getCityNumberResponse = Web.CityWeatherFunc.getCityNumber(arg)
+            if (getCityNumberResponse.first) {
+                runBlocking {
+                    saveData.defaultCityPerGroup[group.id] = arg
+                    saveData.save()
+                    sendMessage("已将群" + group.id + "的默认城市更改为" + arg)
                 }
+            } else {
+                runBlocking { sendMessage("出错了：${getCityNumberResponse.second}") }
             }
         } else {
             sendMessage("请在群聊环境下触发")
@@ -401,13 +403,7 @@ class ConfigureCommand : CompositeCommand(
     suspend fun CommandSender.setDefaultSea(arg: String) {
         if (getGroupOrNull() != null) {
             val groupID = getGroupOrNull()!!.id
-            Web.CityWeatherFunc.getCityNumber(arg) { isSuccessful, data ->
-                if (isSuccessful) {
-                    runBlocking { sendMessage("已将群" + groupID + "的默认城市更改为" + arg) }
-                } else {
-                    runBlocking { sendMessage("出错了：$data") }
-                }
-            }
+            Web.CityWeatherFunc.getCityNumber(arg)
         } else {
             sendMessage("请在群聊环境下触发")
         }
@@ -440,12 +436,11 @@ class ConfigureCommand : CompositeCommand(
 
     @SubCommand("resetCookie")
     suspend fun CommandSender.resetCookie() {
-        Web.getCookie { err ->
-            if (err == null) {
-                runBlocking { sendMessage("Cookie更新完毕") }
-            } else {
-                runBlocking { sendMessage("Cookie更新时出错：$err") }
-            }
+        val getCookieResult = Web.getCookie()
+        if (getCookieResult.first) {
+            runBlocking { sendMessage("Cookie更新完毕") }
+        } else {
+            runBlocking { sendMessage("Cookie更新时出错：${getCookieResult.second}") }
         }
     }
 
@@ -457,32 +452,7 @@ class ConfigureCommand : CompositeCommand(
 
     @SubCommand("dev")
     suspend fun CommandSender.dev() {
-        Web.TyphoonFunc.getTyphoonData { status, err ->
-            if (status) {
-                runBlocking {
-                    sendMessage("Success")
-                    var message = ""
-                    val stormCount = Data.TyphoonData.count()
-                    var i = 0
-                    for ((code, data) in Data.TyphoonData) {
-                        i += 1
-                        message += "代号：$code\n"
-                            .plus("名字：${data.name}\n")
-                            .plus("地区：${data.basin}\n")
-                            .plus("位置：${data.longitude} ${data.latitude}\n")
-                            .plus("中心最大风速：${data.windSpeed}\n")
-                            .plus("中心最低气压：${data.pressure}\n")
-                            .plus("是否有卫星图片：${data.isSatelliteTarget}")
-                        if (i < stormCount) {
-                            message += "\n\n"
-                        }
-                    }
-                    sendMessage(message)
-                }
-            } else {
-                runBlocking { sendMessage("Err: $err") }
-            }
-        }
+
     }
 }
 
@@ -492,19 +462,22 @@ class DevCommand : SimpleCommand(
 ) {
     @Handler
     suspend fun CommandSender.handle(code: String, picType: String) {
-        if (!Data.TyphoonData.containsKey(code)) {
-            sendMessage("err")
-            return
+
+        /*
+        val getTyphoonSatePicResponse = Web.TyphoonFunc.getTyphoonSatePic(code, picType.uppercase())
+        if (getTyphoonSatePicResponse.first) {
+            runBlocking { sendMessage("Finished: $${getTyphoonSatePicResponse.second}") }
         } else {
-            sendMessage("找到了$code")
+            runBlocking { sendMessage("Err: ${getTyphoonSatePicResponse.second}") }
         }
 
-        Web.TyphoonFunc.getTyphoonSatePic(code, picType.uppercase()) { status, data ->
-            if (status) {
-                runBlocking { sendMessage("Finished: $data") }
-            } else {
-                runBlocking { sendMessage("Err: $data") }
-            }
+         */
+
+        val getECResponse = Web.TyphoonFunc.getECForecast(code)
+        if (getECResponse.first) {
+            sendMessage("GOOD:${getECResponse.second}")
+        } else {
+            sendMessage("ERR:${getECResponse.second}")
         }
     }
 }

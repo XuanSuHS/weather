@@ -18,6 +18,8 @@ import java.nio.file.Files
 import java.nio.file.Paths
 import java.nio.file.StandardCopyOption
 import java.util.concurrent.TimeUnit
+import kotlin.collections.contains
+import kotlin.collections.set
 
 
 object Web {
@@ -108,8 +110,8 @@ object Web {
     }
 
     //获取Cookie
-    fun getCookie(callback: (String?) -> Unit) {
-
+    fun getCookie(): Pair<Boolean, String> {
+        var returnData: Pair<Boolean, String>
         //获取Cookie
         val request = Request.Builder()
             .url("https://www.easterlywave.com/weather")
@@ -118,42 +120,34 @@ object Web {
             .get()
             .build()
 
-        client.newCall(request).enqueue(object : Callback {
-            override fun onFailure(call: Call, e: IOException) {
-                // 请求失败时的回调
-                callback(e.message)
-                return
-            }
-
-            override fun onResponse(call: Call, response: Response) {
-                // 请求成功时的回调
-                response.use {
-                    if (response.isSuccessful) {
-                        //设置Cookie
-                        saveData.webCookie = if (response.header("Set-Cookie") != null)
-                            (response.header("Set-Cookie")!!)
-                        else {
-                            "null"
-                        }
-                        saveData.webCookieValue = saveData.webCookie.split(";")[0].replace("csrftoken=", "")
-                        callback(null)
-                        return
-                    } else {
-                        callback(response.code.toString())
-                        return
-                    }
+        try {
+            val response = client.newCall(request).execute()
+            if (response.isSuccessful) {
+                //设置Cookie
+                saveData.webCookie = if (response.header("Set-Cookie") != null)
+                    (response.header("Set-Cookie")!!)
+                else {
+                    "null"
                 }
+                saveData.webCookieValue = saveData.webCookie.split(";")[0].replace("csrftoken=", "")
+                returnData = Pair(true, "")
+            } else {
+                returnData = Pair(false, response.code.toString())
             }
-        })
+        } catch (e: IOException) {
+            returnData = Pair(false, "${e.message}")
+        }
+        return returnData
     }
 
     //获取图片
-    private fun getPic(url: String, imageName: String, callback: (String?) -> Unit) {
+    private fun getPic(url: String, imageName: String): Pair<Boolean, String> {
 
+        val returnData: Pair<Boolean, String>
         //初始化文件获取相关变量
         val file = File(imageFolderPath, imageName)
         val path = Paths.get(file.path)
-        var inputStream: InputStream
+        val inputStream: InputStream
 
         //创建Request
         val request = Request.Builder()
@@ -161,28 +155,25 @@ object Web {
             .addHeader("Connection", "keep-alive")
             .build()
 
-        client.newCall(request).enqueue(object : Callback {
-            //图片下载失败
-            override fun onFailure(call: Call, e: IOException) {
-                callback(e.message)
-            }
-
-            //图片下载成功
-            override fun onResponse(call: Call, response: Response) {
-                if (response.isSuccessful) {
-                    if (response.body?.byteStream() != null) {
-                        inputStream = response.body!!.byteStream()
-                        Files.copy(inputStream, path, StandardCopyOption.REPLACE_EXISTING)
-                        inputStream.close()
-                        callback(null)
-                    } else {
-                        callback("返回内容为空")
-                    }
+        returnData = try {
+            val response = client.newCall(request).execute()
+            if (response.isSuccessful) {
+                if (response.body?.byteStream() != null) {
+                    inputStream = response.body!!.byteStream()
+                    Files.copy(inputStream, path, StandardCopyOption.REPLACE_EXISTING)
+                    inputStream.close()
+                    Pair(true, "")
                 } else {
-                    callback(response.code.toString())
+                    Pair(false, "返回内容为空")
                 }
+            } else {
+                Pair(false, response.code.toString())
             }
-        })
+        } catch (e: IOException) {
+            returnData = Pair(false, "${e.message}")
+            return returnData
+        }
+        return returnData
     }
 
     //天气相关函数
@@ -191,8 +182,8 @@ object Web {
         //获取城市WMO代号
         //搜索成功时返回true与城市代号
         //搜索失败时返回false与错误原因
-        fun getCityNumber(city: String, callback: (Boolean, String) -> Unit) {
-
+        fun getCityNumber(city: String): Pair<Boolean, String> {
+            var returnData: Pair<Boolean, String>
             val mediaType = "application/json;charset=utf-8".toMediaTypeOrNull()
             val requestBody = "{\"content\":\"$city\"}".toRequestBody(mediaType)
             val requestForCityNumber = Request.Builder()
@@ -205,101 +196,85 @@ object Web {
                 .post(requestBody)
                 .build()
 
-            client.newCall(requestForCityNumber).enqueue(object : Callback {
-                override fun onFailure(call: Call, e: IOException) {
-                    // 请求失败时的回调
-                    callback(false, "${e.message}")
-                    return
-                }
+            returnData = try {
+                val response = client.newCall(requestForCityNumber).execute()
+                if (response.isSuccessful) {
+                    var responseJSON = JsonObject()
 
-                override fun onResponse(call: Call, response: Response) {
-                    // 请求成功时的回调
-                    response.use {
-                        if (response.isSuccessful) {
-                            var responseJSON = JsonObject()
-                            try {
-                                responseJSON = JsonParser.parseString(response.body!!.string()).asJsonObject
-                            } catch (e: JsonParseException) {
-                                if (e.message != null) {
-                                    //获得非标准JSON，报错返回
-                                    callback(false, "返回结果非标准JSON，请检查请求是否有误")
-                                    return
-                                }
-                            }
-                            //status表搜索结果是否存在
-                            val status = responseJSON.get("status").toString()
-
-                            //搜索结果不存在时返回错误
-                            if (status == "1") {
-                                callback(false, "目标城市不存在")
-                                return
-                            }
-
-                            //搜索结果个数
-                            val suggestions = responseJSON.get("suggestions").asJsonArray
-                            //不止一个时返回错误
-                            if (suggestions.size() > 1) {
-                                callback(false, "目标城市过多，请再精确些")
-                                return
-                            }
-
-                            //搜索结果唯一时返回城市WMO代号
-                            val cityNumber =
-                                suggestions.get(0).asJsonObject.get("data").toString().replace("\"", "").toInt()
-                            callback(true, cityNumber.toString())
-                        } else {
-                            callback(false, response.code.toString())
+                    try {
+                        responseJSON = JsonParser.parseString(response.body!!.string()).asJsonObject
+                    } catch (e: JsonParseException) {
+                        if (e.message != null) {
+                            //获得非标准JSON，报错返回
+                            returnData = Pair(false, "返回结果非标准JSON，请检查请求是否有误")
+                            return returnData
                         }
                     }
+                    //status表搜索结果是否存在
+                    val status = responseJSON.get("status").toString()
+
+                    //搜索结果不存在时返回错误
+                    if (status == "1") {
+                        returnData = Pair(false, "目标城市不存在")
+                        return returnData
+                    }
+
+                    //搜索结果
+                    val suggestions = responseJSON.get("suggestions").asJsonArray
+
+                    //搜索结果唯一时返回城市WMO代号
+                    val cityNumber =
+                        suggestions.get(0).asJsonObject.get("data").toString().replace("\"", "").toInt()
+                    Pair(true, cityNumber.toString())
+                } else {
+                    Pair(false, response.code.toString())
                 }
-            })
+            } catch (e: IOException) {
+                returnData = Pair(false, "${e.message}")
+                return returnData
+            }
+            return returnData
         }
 
-        fun getWeather(city: String, callback: (String?, String) -> Unit) {
+        fun getWeather(city: String): Pair<Boolean, String> {
+            val returnData: Pair<Boolean, String>
 
             //获取城市WMO
-            getCityNumber(city) { isSuccess, data ->
-                if (isSuccess) {
-                    //成功返回WMO
-                    val cityNumber = data.toInt()
-
-                    //获取城市图片URL
-                    getWeatherURL(cityNumber) { picURI, urlErr ->
-                        if (urlErr == null) {
-                            //图片URL获取成功
-                            //返回图片信息
-                            val weatherPicURL = "https://www.easterlywave.com$picURI"
-                            val imageName = "$cityNumber.png"
-                            //获取图片
-                            getPic(weatherPicURL, imageName) { picErr ->
-                                if (picErr == null) {
-                                    //图片文件获取成功
-                                    //返回图片信息供上传
-                                    callback(null, imageName)
-                                } else {
-                                    //图片文件获取失败
-                                    //返回错误代码
-                                    callback("下载图片时出错：$picErr", "")
-                                }
-                            }
-                        } else {
-                            //图片URL获取失败
-                            //返回错误代码
-                            callback("获取URL时出错：$urlErr", "")
-                        }
-                    }
-                } else {
-                    //执行时出错
-                    callback("请求城市WMO时出错：$data", "")
-                }
+            val getCityNumberResponse = getCityNumber(city)
+            if (!getCityNumberResponse.first) {
+                returnData = Pair(false, "请求城市WMO时出错：${getCityNumberResponse.second}")
+                return returnData
             }
+            //成功返回WMO
+            val cityNumber = getCityNumberResponse.second.toInt()
+
+            //获取城市图片URL
+            //出错时返回
+            val getWeatherURLResponse = getWeatherURL(cityNumber)
+            if (!getWeatherURLResponse.first) {
+                returnData = Pair(false, "获取URL时出错：${getWeatherURLResponse.second}")
+                return returnData
+            }
+
+            //获取图片
+            val weatherPicURL = getWeatherURLResponse.second
+            val imageName = "$cityNumber.png"
+            val getPicResponse = getPic(weatherPicURL, imageName)
+            returnData = if (getPicResponse.first) {
+                //图片文件获取成功
+                //返回图片信息供上传
+                Pair(true, imageName)
+            } else {
+                //图片文件获取失败
+                //返回错误代码
+                Pair(false, "下载图片时出错：${getPicResponse.second}")
+            }
+            return returnData
         }
 
         //获取天气图片URL
-        //callback第一个为回调数据，在此为图片URI
-        //callback第二个为错误信息，无错误时为null
-        private fun getWeatherURL(cityNumber: Int, callback: (String, String?) -> Unit) {
-
+        private fun getWeatherURL(cityNumber: Int): Pair<Boolean, String> {
+            val returnData: Pair<Boolean, String>
             //获取图片URL的文件地址部分
             val mediaType = "application/json;charset=utf-8".toMediaTypeOrNull()
             val requestBody = "{\"content\":\"$cityNumber\"}".toRequestBody(mediaType)
@@ -313,30 +288,23 @@ object Web {
                 .post(requestBody)
                 .build()
 
-            //处理返回的JSON
-            client.newCall(requestForPicURL).enqueue(object : Callback {
-                override fun onFailure(call: Call, e: IOException) {
-                    // 请求失败时的回调
-                    callback("null", e.message)
-                    return
-                }
+            returnData = try {
+                val response = client.newCall(requestForPicURL).execute()
+                if (response.isSuccessful) {
+                    val picURI =
+                        JsonParser.parseString(response.body?.string()).asJsonObject.get("src").toString()
+                            .replace("\"", "")
 
-                override fun onResponse(call: Call, response: Response) {
-                    // 请求成功时的回调
-                    response.use {
-                        if (response.isSuccessful) {
-                            val weatherPicURI =
-                                JsonParser.parseString(response.body?.string()).asJsonObject.get("src").toString()
-                                    .replace("\"", "")
-                            callback(weatherPicURI, null)
-                            return
-                        } else {
-                            callback("null", response.code.toString())
-                            return
-                        }
-                    }
+                    val weatherPicURL = "https://www.easterlywave.com$picURI"
+                    Pair(true, weatherPicURL)
+                } else {
+                    Pair(false, response.code.toString())
                 }
-            })
+            } catch (e: IOException) {
+                returnData = Pair(false, "${e.message}")
+                return returnData
+            }
+            return returnData
         }
     }
 
@@ -388,26 +356,34 @@ object Web {
             return result
         }
 
-        fun getTyphoon(callback: (Boolean, String?) -> Unit) {
-            //TODO:重写：综合不同机构的预报，加上卫星图片
-            getTyphoonData { status, data ->
-                if (status) {
 
-                } else {
-                    callback(false, data)
-                }
+        fun getECForecast(code: String): Pair<Boolean, String> {
+            val ecTimeResponse = getECTime()
+            if (!ecTimeResponse.first) {
+                return Pair(false, ecTimeResponse.second)
+            }
+
+            val typhoonName = Data.TyphoonData[code]!!.name
+            val ecTime = ecTimeResponse.second
+            val ecURL = "https://www.easterlywave.com/media/typhoon/ensemble/$ecTime/$typhoonName.png"
+            val imageName = "ec-${ecTime}-$typhoonName.png"
+            val getPicResult = getPic(ecURL, imageName)
+            return if (getPicResult.first) {
+                Pair(true, imageName)
+            } else {
+                Pair(false, "下载图片时出错：${getPicResult.second}")
             }
         }
 
-        //获取台风图片URL
+        //获取EC预报时间
         //基于EasterlyWave
-        //回调值第一个为成功时数据
-        //第二个是出错时错误代码
-        private fun getECUrl(callback: (String?, String?) -> Unit) {
+        private fun getECTime(): Pair<Boolean, String> {
+
+            var returnData = Pair(false, "图片URL获取失败")
 
             val mediaType = "application/json;charset=utf-8".toMediaTypeOrNull()
             val requestBody = "".toRequestBody(mediaType)
-            val request = Request.Builder()
+            val requestForURL = Request.Builder()
                 .url("https://www.easterlywave.com/action/typhoon/ecens")
                 .header("Cookie", saveData.webCookie)
                 .addHeader("Content-Type", "application/json")
@@ -417,28 +393,23 @@ object Web {
                 .post(requestBody)
                 .build()
 
-            client.newCall(request).enqueue(object : Callback {
-                override fun onFailure(call: Call, e: IOException) {
-                    // 请求失败时的回调
-                    callback(null, e.message)
+            returnData = try {
+                val response = client.newCall(requestForURL).execute()
+                if (response.isSuccessful) {
+                    val time =
+                        JsonParser.parseString(response.body!!.string()).asJsonObject
+                            .get("data").asJsonArray
+                            .get(0).asJsonObject
+                            .get("basetime").toString().replace("\"", "")
+                    Pair(true, time)
+                } else {
+                    Pair(false, response.code.toString())
                 }
-
-                override fun onResponse(call: Call, response: Response) {
-                    // 请求成功时的回调
-                    response.use {
-                        if (response.isSuccessful) {
-                            val time =
-                                JsonParser.parseString(response.body!!.string()).asJsonObject
-                                    .get("data").asJsonArray
-                                    .get(0).asJsonObject
-                                    .get("basetime").toString().replace("\"", "")
-                            callback(time, null)
-                        } else {
-                            callback(null, response.code.toString())
-                        }
-                    }
-                }
-            })
+            } catch (e: IOException) {
+                Pair(false, "${e.message}")
+                return returnData
+            }
+            return returnData
         }
 
 
@@ -446,7 +417,7 @@ object Web {
         //基于EasterlyWave
         //存在台风时回调true和台风个数
         //不存在台风时
-        fun getTyphoonData(callback: (Boolean, String?) -> Unit) {
+        fun getTyphoonData(): Pair<Boolean, String> {
             val mediaType = "application/json;charset=utf-8".toMediaTypeOrNull()
             val requestBody = "".toRequestBody(mediaType)
             val request = Request.Builder()
@@ -459,140 +430,125 @@ object Web {
                 .post(requestBody)
                 .build()
 
-            client.newCall(request).enqueue(object : Callback {
-                override fun onFailure(call: Call, e: IOException) {
-                    // 请求失败时的回调
-                    callback(false, e.message)
-                }
+            val returnData: Pair<Boolean, String>
+            val response: Response
+            try {
+                response = client.newCall(request).execute()
+            } catch (e: IOException) {
+                returnData = Pair(false, "${e.message}")
+                return returnData
+            }
 
-                override fun onResponse(call: Call, response: Response) {
-                    // 请求成功时的回调
-                    response.use {
-                        if (response.isSuccessful) {
-                            if (response.body != null) {
-                                Data.TyphoonData.clear()
-                                val responseData = response.body!!.string()
-                                val typhoonData = JsonParser.parseString(responseData).asJsonObject
-                                //设置 需要关注的台风
-                                Data.typhoonFocus = typhoonData.get("focus").toString().replace("\"", "")
+            if (response.isSuccessful) {
+                if (response.body != null) {
+                    Data.TyphoonData.clear()
+                    val responseData = response.body!!.string()
+                    val typhoonData = JsonParser.parseString(responseData).asJsonObject
+                    //设置 需要关注的台风
+                    Data.typhoonFocus = typhoonData.get("focus").toString().replace("\"", "")
 
-                                //详细台风信息
-                                val stormsArray = typhoonData.get("storms").asJsonArray
-                                val stormCount = stormsArray.size()
-                                //如果没台风，直接回调
-                                if (stormCount == 0) {
-                                    callback(false, "当前无台风")
-                                    return
-                                }
-
-                                for (i in 0 until stormCount) {
-                                    val stormData = stormsArray.get(i).asJsonObject
-                                    val code = stormData.get("code").toString().replace("\"", "")
-                                    val name = stormData.get("name").toString().replace("\"", "")
-                                    val basin = stormData.get("basin").toString().replace("\"", "")
-                                    val longitude = stormData.get("lonstr").toString().replace("\"", "")
-                                    val latitude = stormData.get("latstr").toString().replace("\"", "")
-                                    val windSpeed = stormData.get("wind").toString().replace("\"", "").plus(" Kt")
-                                    val pressure = stormData.get("pressure").toString().replace("\"", "").plus(" hPa")
-                                    val isSatelliteTarget =
-                                        stormData.get("is_target").toString().replace("\"", "").toBoolean()
-                                    Data.TyphoonData[code] = Data.TyphoonDataClass(
-                                        name,
-                                        basin,
-                                        longitude,
-                                        latitude,
-                                        windSpeed,
-                                        pressure,
-                                        isSatelliteTarget
-                                    )
-                                }
-                                callback(true, "")
-                            } else {
-                                callback(false, "返回内容为空")
-                            }
-
-                        } else {
-                            callback(true, response.code.toString())
-                        }
+                    //详细台风信息
+                    val stormsArray = typhoonData.get("storms").asJsonArray
+                    val stormCount = stormsArray.size()
+                    //如果没台风，直接回调
+                    if (stormCount == 0) {
+                        returnData = Pair(false, "当前无台风")
+                        return returnData
                     }
+
+                    for (i in 0 until stormCount) {
+                        val stormData = stormsArray.get(i).asJsonObject
+                        val code = stormData.get("code").toString().replace("\"", "")
+                        val name = stormData.get("name").toString().replace("\"", "")
+                        val basin = stormData.get("basin").toString().replace("\"", "")
+                        val longitude = stormData.get("lonstr").toString().replace("\"", "")
+                        val latitude = stormData.get("latstr").toString().replace("\"", "")
+                        val windSpeed = stormData.get("wind").toString().replace("\"", "").plus(" Kt")
+                        val pressure = stormData.get("pressure").toString().replace("\"", "").plus(" hPa")
+                        val isSatelliteTarget =
+                            stormData.get("is_target").toString().replace("\"", "").toBoolean()
+                        Data.TyphoonData[code] = Data.TyphoonDataClass(
+                            name,
+                            basin,
+                            longitude,
+                            latitude,
+                            windSpeed,
+                            pressure,
+                            isSatelliteTarget
+                        )
+                    }
+                    returnData = Pair(true, "")
+                } else {
+                    returnData = Pair(false, "返回内容为空")
                 }
-            })
+
+            } else {
+                returnData = Pair(false, response.code.toString())
+            }
+            return returnData
         }
 
 
-        fun getTyphoonSatePic(code: String, picType: String, callback: (Boolean, String?) -> Unit) {
-            //查询图片类型是否存在
-            //TODO
-            //查询台风是否存在
-            if (!Data.TyphoonData.containsKey(code)) {
-                callback(false, "未找到$code")
-                return
-            }
-
-            //是否有卫星图片
-            else if (!Data.TyphoonData[code]!!.isSatelliteTarget) {
-                callback(false, "此台风不存在卫星图片")
-                return
-            }
+        fun getTyphoonSatePic(code: String, picType: String): Pair<Boolean, String> {
+            val returnData: Pair<Boolean, String>
 
             //从Dapiya网站下载指定卫星图片
             val url = "https://data.dapiya.top/history/$code/$picType/${code}_${picType}.png"
             val imageName = "${code}_${picType}.png"
-            getPic(url, imageName) { err ->
-                if (err == null) {
-                    callback(true, imageName)
-                } else {
-                    callback(false, err)
-                }
+            val getPicResponse = getPic(url, imageName)
+            returnData = if (getPicResponse.first) {
+                Pair(true, imageName)
+            } else {
+                Pair(false, getPicResponse.second)
             }
+
+            return returnData
         }
     }
 
     //海温相关函数
     object SSTFunc {
 
-        fun getSSTbyRTOFS(area: String, callback: (String?, String?) -> Unit) {
+        fun getSSTbyRTOFS(area: String): Pair<Boolean, String> {
+            val returnData: Pair<Boolean, String>
             //检查传入海域信息
             //错误时回调ERR
             if (area !in Data.seaforUse) {
-                callback(null, "该海域不存在")
-                return
+                returnData = Pair(false, "该海域不存在")
+                return returnData
             }
 
-            getSSTbyRTOFSUrl { time, urlErr ->
-                if (urlErr == null) {
-                    //图片URL获取成功
-                    //根据URL信息获取图片文件
-                    val url = "https://www.easterlywave.com/media/typhoon/sst/$time/$area.png"
-                    val imageName = "$time-$area.png"
-                    if (imageFolder.resolve(imageName).exists()) {
-                        callback(imageName, null)
-                        return@getSSTbyRTOFSUrl
-                    } else {
-                        getPic(url, imageName) { picErr ->
-                            if (picErr == null) {
-                                //图片文件获取成功
-                                //返回图片信息供上传
-                                callback(imageName, null)
-                                return@getPic
-                            } else {
-                                //图片文件获取失败
-                                //返回错误信息
-                                callback(null, "下载图片时出错：$picErr")
-                                return@getPic
-                            }
-                        }
-                    }
+            val getSSTByRTOFSURLResponse = getSSTbyRTOFSUrl()
+            if (getSSTByRTOFSURLResponse.first) {
+                val time = getSSTByRTOFSURLResponse.second
+                //图片URL获取成功
+                //根据URL信息获取图片文件
+                val url = "https://www.easterlywave.com/media/typhoon/sst/$time/$area.png"
+                val imageName = "$time-$area.png"
+
+                returnData = if (imageFolder.resolve(imageName).exists()) {
+                    Pair(true, imageName)
                 } else {
-                    //图片URL获取失败
-                    //返回错误信息
-                    callback(null, "获取URL时出错：$urlErr")
-                    return@getSSTbyRTOFSUrl
+                    val getPicResponse = getPic(url, imageName)
+                    if (getPicResponse.first) {
+                        //图片文件获取成功
+                        //返回图片信息供上传
+                        Pair(true, imageName)
+                    } else {
+                        //图片文件获取失败
+                        //返回错误信息
+                        Pair(false, "下载图片时出错：${getPicResponse.second}")
+                    }
                 }
+            } else {
+                //图片URL获取失败
+                //返回错误信息
+                returnData = Pair(false, "获取URL时出错：${getSSTByRTOFSURLResponse.second}")
             }
+            return returnData
         }
 
-        private fun getSSTbyRTOFSUrl(callback: (String, String?) -> Unit) {
+        private fun getSSTbyRTOFSUrl(): Pair<Boolean, String> {
 
             val mediaType = "application/json;charset=utf-8".toMediaTypeOrNull()
             val requestBody = "".toRequestBody(mediaType)
@@ -606,28 +562,28 @@ object Web {
                 .post(requestBody)
                 .build()
 
-            client.newCall(request).enqueue(object : Callback {
-                override fun onFailure(call: Call, e: IOException) {
-                    // 请求失败时的回调
-                    callback("", e.message)
-                }
+            val returnData: Pair<Boolean, String>
+            val response: Response
+            try {
+                response = client.newCall(request).execute()
+            } catch (e: IOException) {
 
-                override fun onResponse(call: Call, response: Response) {
-                    // 请求成功时的回调
-                    response.use {
-                        if (response.isSuccessful) {
-                            val body = response.body!!.string()
-                            val times =
-                                JsonParser.parseString(body).asJsonObject
-                                    .get("times").asJsonArray
-                                    .get(0).toString().replace("\"", "")
-                            callback(times, null)
-                        } else {
-                            callback("", response.code.toString())
-                        }
-                    }
-                }
-            })
+                returnData = Pair(false, "${e.message}")
+                return returnData
+            }
+
+            returnData = if (response.isSuccessful) {
+                val body = response.body!!.string()
+                val times =
+                    JsonParser.parseString(body).asJsonObject
+                        .get("times").asJsonArray
+                        .get(0).toString().replace("\"", "")
+                Pair(true, times)
+            } else {
+                Pair(false, response.code.toString())
+            }
+
+            return returnData
         }
     }
 }

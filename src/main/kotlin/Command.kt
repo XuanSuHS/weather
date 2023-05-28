@@ -415,6 +415,10 @@ class ConfigureCommand : CompositeCommand(
     @SubCommand("reload")
     suspend fun CommandSender.configReload() {
         Config.reload()
+        val fileDeleteResult = deleteFolderContents(imageFolder)
+        if (fileDeleteResult != 0) {
+            sendMessage("清除了${fileDeleteResult}张缓存图片文件")
+        }
         sendMessage("配置文件重载成功")
     }
 

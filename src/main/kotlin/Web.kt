@@ -189,8 +189,8 @@ object Web {
         //获取城市WMO代号
         //搜索成功时返回true与城市代号
         //搜索失败时返回false与错误原因
-        fun getCityNumber(city: String, callback: (Boolean, String) -> Unit) {
-
+        fun getCityNumber(city: String): Pair<Boolean, String> {
+            var returnData: Pair<Boolean, String>
             val mediaType = "application/json;charset=utf-8".toMediaTypeOrNull()
             val requestBody = "{\"content\":\"$city\"}".toRequestBody(mediaType)
             val requestForCityNumber = Request.Builder()
@@ -203,95 +203,87 @@ object Web {
                 .post(requestBody)
                 .build()
 
-            client.newCall(requestForCityNumber).enqueue(object : Callback {
-                override fun onFailure(call: Call, e: IOException) {
-                    // 请求失败时的回调
-                    callback(false, "${e.message}")
-                    return
-                }
+            returnData = try {
+                val response = client.newCall(requestForCityNumber).execute()
+                if (response.isSuccessful) {
+                    var responseJSON = JsonObject()
 
-                override fun onResponse(call: Call, response: Response) {
-                    // 请求成功时的回调
-                    response.use {
-                        if (response.isSuccessful) {
-                            var responseJSON = JsonObject()
-                            try {
-                                responseJSON = JsonParser.parseString(response.body!!.string()).asJsonObject
-                            } catch (e: JsonParseException) {
-                                if (e.message != null) {
-                                    //获得非标准JSON，报错返回
-                                    callback(false, "返回结果非标准JSON，请检查请求是否有误")
-                                    return
-                                }
-                            }
-                            //status表搜索结果是否存在
-                            val status = responseJSON.get("status").toString()
-
-                            //搜索结果不存在时返回错误
-                            if (status == "1") {
-                                callback(false, "目标城市不存在")
-                                return
-                            }
-
-                            //搜索结果个数
-                            val suggestions = responseJSON.get("suggestions").asJsonArray
-                            //不止一个时返回错误
-                            if (suggestions.size() > 1) {
-                                callback(false, "目标城市过多，请再精确些")
-                                return
-                            }
-
-                            //搜索结果唯一时返回城市WMO代号
-                            val cityNumber =
-                                suggestions.get(0).asJsonObject.get("data").toString().replace("\"", "").toInt()
-                            callback(true, cityNumber.toString())
-                        } else {
-                            callback(false, response.code.toString())
+                    try {
+                        responseJSON = JsonParser.parseString(response.body!!.string()).asJsonObject
+                    } catch (e: JsonParseException) {
+                        if (e.message != null) {
+                            //获得非标准JSON，报错返回
+                            returnData = Pair(false, "返回结果非标准JSON，请检查请求是否有误")
+                            return returnData
                         }
                     }
+                    //status表搜索结果是否存在
+                    val status = responseJSON.get("status").toString()
+
+                    //搜索结果不存在时返回错误
+                    if (status == "1") {
+                        returnData = Pair(false, "目标城市不存在")
+                        return returnData
+                    }
+
+                    //搜索结果个数
+                    val suggestions = responseJSON.get("suggestions").asJsonArray
+                    //不止一个时返回错误
+                    if (suggestions.size() > 1) {
+                        returnData = Pair(false, "目标城市过多，请再精确些")
+                        return returnData
+                    }
+
+                    //搜索结果唯一时返回城市WMO代号
+                    val cityNumber =
+                        suggestions.get(0).asJsonObject.get("data").toString().replace("\"", "").toInt()
+                    Pair(true, cityNumber.toString())
+                } else {
+                    Pair(false, response.code.toString())
                 }
-            })
+            } catch (e: IOException) {
+                returnData = Pair(false, "${e.message}")
+                return returnData
+            }
+            return returnData
         }
 
         fun getWeather(city: String, callback: (String?, String) -> Unit) {
 
             //获取城市WMO
-            getCityNumber(city) { isSuccess, data ->
-                if (isSuccess) {
-                    //成功返回WMO
-                    val cityNumber = data.toInt()
+            val getCityNumberResponse = getCityNumber(city)
+            if (getCityNumberResponse.first) {
+                //成功返回WMO
+                val cityNumber = getCityNumberResponse.second.toInt()
 
-                    //获取城市图片URL
-                    val getWeatherURLResponse = getWeatherURL(cityNumber)
-                    if (getWeatherURLResponse.first) {
-                        val weatherPicURL = getWeatherURLResponse.second
-                        val imageName = "$cityNumber.png"
-                        //获取图片
-                        val getPicResponse = getPic(weatherPicURL, imageName)
-                        if (getPicResponse.first) {
-                            //图片文件获取成功
-                            //返回图片信息供上传
-                            callback(null, imageName)
-                        } else {
-                            //图片文件获取失败
-                            //返回错误代码
-                            callback("下载图片时出错：${getPicResponse.second}", "")
-                        }
+                //获取城市图片URL
+                val getWeatherURLResponse = getWeatherURL(cityNumber)
+                if (getWeatherURLResponse.first) {
+                    val weatherPicURL = getWeatherURLResponse.second
+                    val imageName = "$cityNumber.png"
+                    //获取图片
+                    val getPicResponse = getPic(weatherPicURL, imageName)
+                    if (getPicResponse.first) {
+                        //图片文件获取成功
+                        //返回图片信息供上传
+                        callback(null, imageName)
                     } else {
-                        //图片URL获取失败
+                        //图片文件获取失败
                         //返回错误代码
-                        callback("获取URL时出错：${getWeatherURLResponse.second}", "")
+                        callback("下载图片时出错：${getPicResponse.second}", "")
                     }
                 } else {
-                    //执行时出错
-                    callback("请求城市WMO时出错：$data", "")
+                    //图片URL获取失败
+                    //返回错误代码
+                    callback("获取URL时出错：${getWeatherURLResponse.second}", "")
                 }
+            } else {
+                //执行时出错
+                callback("请求城市WMO时出错：${getCityNumberResponse.second}", "")
             }
         }
 
         //获取天气图片URL
-        //callback第一个为回调数据，在此为图片URI
-        //callback第二个为错误信息，无错误时为null
         private fun getWeatherURL(cityNumber: Int): Pair<Boolean, String> {
             val returnData: Pair<Boolean, String>
             //获取图片URL的文件地址部分

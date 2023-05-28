@@ -355,13 +355,17 @@ class ConfigureCommand : CompositeCommand(
     @SubCommand("city")
     suspend fun CommandSender.setDefaultCity(arg: String) {
         if (getGroupOrNull() != null) {
-            val groupID = getGroupOrNull()!!.id
-            Web.CityWeatherFunc.getCityNumber(arg) { isSuccessful, data ->
-                if (isSuccessful) {
-                    runBlocking { sendMessage("已将群" + groupID + "的默认城市更改为" + arg) }
-                } else {
-                    runBlocking { sendMessage("出错了：$data") }
+            val group = getGroupOrNull()!!
+
+            val getCityNumberResponse = Web.CityWeatherFunc.getCityNumber(arg)
+            if (getCityNumberResponse.first) {
+                runBlocking {
+                    saveData.defaultCityPerGroup[group.id] = arg
+                    saveData.save()
+                    sendMessage("已将群" + group.id + "的默认城市更改为" + arg)
                 }
+            } else {
+                runBlocking { sendMessage("出错了：${getCityNumberResponse.second}") }
             }
         } else {
             sendMessage("请在群聊环境下触发")
@@ -372,13 +376,7 @@ class ConfigureCommand : CompositeCommand(
     suspend fun CommandSender.setDefaultSea(arg: String) {
         if (getGroupOrNull() != null) {
             val groupID = getGroupOrNull()!!.id
-            Web.CityWeatherFunc.getCityNumber(arg) { isSuccessful, data ->
-                if (isSuccessful) {
-                    runBlocking { sendMessage("已将群" + groupID + "的默认城市更改为" + arg) }
-                } else {
-                    runBlocking { sendMessage("出错了：$data") }
-                }
-            }
+            Web.CityWeatherFunc.getCityNumber(arg)
         } else {
             sendMessage("请在群聊环境下触发")
         }

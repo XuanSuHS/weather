@@ -7,6 +7,7 @@ import com.google.gson.JsonParser
 import okhttp3.*
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.RequestBody.Companion.toRequestBody
+import top.xuansu.mirai.weather.weatherMain.dataFolder
 import top.xuansu.mirai.weather.weatherMain.imageFolder
 import top.xuansu.mirai.weather.weatherMain.imageFolderPath
 import java.io.File
@@ -182,7 +183,7 @@ object Web {
         //获取城市WMO代号
         //搜索成功时返回true与城市代号
         //搜索失败时返回false与错误原因
-        fun getCityNumber(city: String): Pair<Boolean, String> {
+        fun getCityNumber(city: String, number: String): Pair<Boolean, String> {
             var returnData: Pair<Boolean, String>
             val mediaType = "application/json;charset=utf-8".toMediaTypeOrNull()
             val requestBody = "{\"content\":\"$city\"}".toRequestBody(mediaType)
@@ -222,9 +223,44 @@ object Web {
                     //搜索结果
                     val suggestions = responseJSON.get("suggestions").asJsonArray
 
+                    val suggestionNo = if (suggestions.size() > 1) {
+                        when (val inputSuggestionNo = number.toIntOrNull()) {
+                            null -> {
+                                var message = "\n找到多个备选项"
+                                for (i in 0 until suggestions.size()) {
+                                    message += "\n${i + 1}.${
+                                        suggestions.get(i).asJsonObject.get("value").toString().replace("\"", "")
+                                    }"
+                                }
+                                message += "\n输入 /weather $city <编号> 来选择您想要的结果"
+                                returnData = Pair(false, message)
+                                return returnData
+                            }
+
+                            !in 1..suggestions.size() -> {
+                                var message = "找不到该城市，请检查输入是否正确"
+                                message += "\n找到多个备选项"
+                                for (i in 0 until suggestions.size()) {
+                                    message += "\n${i + 1}.${
+                                        suggestions.get(i).asJsonObject.get("value").toString().replace("\"", "")
+                                    }"
+                                }
+                                message += "\n输入 /weather $city <编号> 来选择您想要的结果"
+                                returnData = Pair(false, message)
+                                return returnData
+                            }
+
+                            else -> {
+                                inputSuggestionNo - 1
+                            }
+                        }
+                    } else {
+                        0
+                    }
+
                     //搜索结果唯一时返回城市WMO代号
                     val cityNumber =
-                        suggestions.get(0).asJsonObject.get("data").toString().replace("\"", "").toInt()
+                        suggestions.get(suggestionNo).asJsonObject.get("data").toString().replace("\"", "").toInt()
                     Pair(true, cityNumber.toString())
                 } else {
                     Pair(false, response.code.toString())
@@ -236,17 +272,17 @@ object Web {
             return returnData
         }
 
-        fun getWeather(city: String): Pair<Boolean, String> {
+        fun getWeather(city: String, number: String): Pair<Boolean, String> {
             val returnData: Pair<Boolean, String>
 
             //获取城市WMO
-            val getCityNumberResponse = getCityNumber(city)
-            if (!getCityNumberResponse.first) {
+            val getCityNumberResponse = getCityNumber(city, number)
+            val cityNumber = if (!getCityNumberResponse.first) {
                 returnData = Pair(false, "请求城市WMO时出错：${getCityNumberResponse.second}")
                 return returnData
+            } else {
+                getCityNumberResponse.second.toInt()
             }
-            //成功返回WMO
-            val cityNumber = getCityNumberResponse.second.toInt()
 
             //获取城市图片URL
             //出错时返回
@@ -367,11 +403,15 @@ object Web {
             val ecTime = ecTimeResponse.second
             val ecURL = "https://www.easterlywave.com/media/typhoon/ensemble/$ecTime/$typhoonName.png"
             val imageName = "ec-${ecTime}-$typhoonName.png"
-            val getPicResult = getPic(ecURL, imageName)
-            return if (getPicResult.first) {
+            return if (dataFolder.resolve(imageName).exists()) {
                 Pair(true, imageName)
             } else {
-                Pair(false, "下载图片时出错：${getPicResult.second}")
+                val getPicResult = getPic(ecURL, imageName)
+                if (getPicResult.first) {
+                    Pair(true, imageName)
+                } else {
+                    Pair(false, "下载图片时出错：${getPicResult.second}")
+                }
             }
         }
 

@@ -15,10 +15,11 @@ import top.xuansu.mirai.weather.weatherMain.save
 class WeatherCommand : SimpleCommand(
     owner = weatherMain,
     primaryName = "weather",
-    secondaryNames = arrayOf("天气")
+    secondaryNames = arrayOf("天气"),
+    description = "获取城市天气信息"
 ) {
     @Handler
-    suspend fun CommandSender.handle(city: String) {
+    suspend fun CommandSender.handle(city: String, number: String = "") {
         val group: Group
         if (getGroupOrNull() != null) {
             group = getGroupOrNull()!!
@@ -27,7 +28,7 @@ class WeatherCommand : SimpleCommand(
                 return
             }
 
-            val getWeatherResponse = Web.CityWeatherFunc.getWeather(city)
+            val getWeatherResponse = Web.CityWeatherFunc.getWeather(city, number)
             if (getWeatherResponse.first) {
                 runBlocking {
                     val imageName = getWeatherResponse.second
@@ -44,7 +45,8 @@ class WeatherCommand : SimpleCommand(
 class TyphoonCommand : SimpleCommand(
     owner = weatherMain,
     primaryName = "typhoon",
-    secondaryNames = arrayOf("台风", "ty")
+    secondaryNames = arrayOf("台风", "ty"),
+    description = "获取台风信息"
 ) {
     @Handler
     suspend fun CommandSender.handle(codeIn: String = "") {
@@ -123,7 +125,8 @@ class TyphoonCommand : SimpleCommand(
 class TyphoonImgCommand : SimpleCommand(
     owner = weatherMain,
     primaryName = "typhoon-img",
-    secondaryNames = arrayOf("台风图片", "ty-img", "tyImg")
+    secondaryNames = arrayOf("台风图片", "ty-img", "tyImg"),
+    description = "获取台风卫星图片"
 ) {
     @Handler
     suspend fun CommandSender.handle(codeIn: String = "", imageType: String = "") {
@@ -379,36 +382,6 @@ class ConfigureCommand : CompositeCommand(
         }
     }
 
-    @SubCommand("city")
-    suspend fun CommandSender.setDefaultCity(arg: String) {
-        if (getGroupOrNull() != null) {
-            val group = getGroupOrNull()!!
-
-            val getCityNumberResponse = Web.CityWeatherFunc.getCityNumber(arg)
-            if (getCityNumberResponse.first) {
-                runBlocking {
-                    saveData.defaultCityPerGroup[group.id] = arg
-                    saveData.save()
-                    sendMessage("已将群" + group.id + "的默认城市更改为" + arg)
-                }
-            } else {
-                runBlocking { sendMessage("出错了：${getCityNumberResponse.second}") }
-            }
-        } else {
-            sendMessage("请在群聊环境下触发")
-        }
-    }
-
-    @SubCommand("sea")
-    suspend fun CommandSender.setDefaultSea(arg: String) {
-        if (getGroupOrNull() != null) {
-            val groupID = getGroupOrNull()!!.id
-            Web.CityWeatherFunc.getCityNumber(arg)
-        } else {
-            sendMessage("请在群聊环境下触发")
-        }
-    }
-
     @SubCommand("status")
     suspend fun CommandSender.status() {
         if (getGroupOrNull() != null) {
@@ -422,11 +395,6 @@ class ConfigureCommand : CompositeCommand(
                     "代理未启用\n"
                 }
 
-                message += if (saveData.defaultCityPerGroup[group.id] != null) {
-                    "默认城市：${saveData.defaultCityPerGroup[group.id]}"
-                } else {
-                    "默认城市未设置"
-                }
                 sendMessage(message)
             } else {
                 sendMessage("本群未启用天气插件")
@@ -458,21 +426,10 @@ class ConfigureCommand : CompositeCommand(
 
 class DevCommand : SimpleCommand(
     owner = weatherMain,
-    primaryName = "dev"
+    primaryName = "dev",
 ) {
     @Handler
-    suspend fun CommandSender.handle(code: String, picType: String) {
-
-        /*
-        val getTyphoonSatePicResponse = Web.TyphoonFunc.getTyphoonSatePic(code, picType.uppercase())
-        if (getTyphoonSatePicResponse.first) {
-            runBlocking { sendMessage("Finished: $${getTyphoonSatePicResponse.second}") }
-        } else {
-            runBlocking { sendMessage("Err: ${getTyphoonSatePicResponse.second}") }
-        }
-
-         */
-
+    suspend fun CommandSender.handle(code: String) {
         val getECResponse = Web.TyphoonFunc.getECForecast(code)
         if (getECResponse.first) {
             sendMessage("GOOD:${getECResponse.second}")

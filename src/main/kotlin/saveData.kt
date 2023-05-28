@@ -6,6 +6,4 @@ import net.mamoe.mirai.console.data.value
 object saveData : AutoSavePluginData("data") {
     var webCookie: String by value("")
     var webCookieValue: String by value("")
-
-    val defaultCityPerGroup: MutableMap<Long, String> by value(mutableMapOf())
 }

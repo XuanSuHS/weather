@@ -27,15 +27,15 @@ class WeatherCommand : SimpleCommand(
                 return
             }
 
-            Web.CityWeatherFunc.getWeather(city) { err, imageName ->
-                if (err != null) {
-                    runBlocking { group.sendMessage(err) }
-                } else {
-                    runBlocking {
-                        val img = imageFolder.resolve(imageName).uploadAsImage(group, "png")
-                        group.sendMessage(img)
-                    }
+            val getWeatherResponse = Web.CityWeatherFunc.getWeather(city)
+            if (getWeatherResponse.first) {
+                runBlocking {
+                    val imageName = getWeatherResponse.second
+                    val img = imageFolder.resolve(imageName).uploadAsImage(group, "png")
+                    group.sendMessage(img)
                 }
+            } else {
+                runBlocking { group.sendMessage(getWeatherResponse.second) }
             }
         }
     }

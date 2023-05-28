@@ -226,13 +226,8 @@ object Web {
                         return returnData
                     }
 
-                    //搜索结果个数
+                    //搜索结果
                     val suggestions = responseJSON.get("suggestions").asJsonArray
-                    //不止一个时返回错误
-                    if (suggestions.size() > 1) {
-                        returnData = Pair(false, "目标城市过多，请再精确些")
-                        return returnData
-                    }
 
                     //搜索结果唯一时返回城市WMO代号
                     val cityNumber =
@@ -248,39 +243,40 @@ object Web {
             return returnData
         }
 
-        fun getWeather(city: String, callback: (String?, String) -> Unit) {
+        fun getWeather(city: String): Pair<Boolean, String> {
+            val returnData: Pair<Boolean, String>
 
             //获取城市WMO
             val getCityNumberResponse = getCityNumber(city)
-            if (getCityNumberResponse.first) {
-                //成功返回WMO
-                val cityNumber = getCityNumberResponse.second.toInt()
-
-                //获取城市图片URL
-                val getWeatherURLResponse = getWeatherURL(cityNumber)
-                if (getWeatherURLResponse.first) {
-                    val weatherPicURL = getWeatherURLResponse.second
-                    val imageName = "$cityNumber.png"
-                    //获取图片
-                    val getPicResponse = getPic(weatherPicURL, imageName)
-                    if (getPicResponse.first) {
-                        //图片文件获取成功
-                        //返回图片信息供上传
-                        callback(null, imageName)
-                    } else {
-                        //图片文件获取失败
-                        //返回错误代码
-                        callback("下载图片时出错：${getPicResponse.second}", "")
-                    }
-                } else {
-                    //图片URL获取失败
-                    //返回错误代码
-                    callback("获取URL时出错：${getWeatherURLResponse.second}", "")
-                }
-            } else {
-                //执行时出错
-                callback("请求城市WMO时出错：${getCityNumberResponse.second}", "")
+            if (!getCityNumberResponse.first) {
+                returnData = Pair(false, "请求城市WMO时出错：${getCityNumberResponse.second}")
+                return returnData
             }
+            //成功返回WMO
+            val cityNumber = getCityNumberResponse.second.toInt()
+
+            //获取城市图片URL
+            //出错时返回
+            val getWeatherURLResponse = getWeatherURL(cityNumber)
+            if (!getWeatherURLResponse.first) {
+                returnData = Pair(false, "获取URL时出错：${getWeatherURLResponse.second}")
+                return returnData
+            }
+
+            //获取图片
+            val weatherPicURL = getWeatherURLResponse.second
+            val imageName = "$cityNumber.png"
+            val getPicResponse = getPic(weatherPicURL, imageName)
+            returnData = if (getPicResponse.first) {
+                //图片文件获取成功
+                //返回图片信息供上传
+                Pair(true, imageName)
+            } else {
+                //图片文件获取失败
+                //返回错误代码
+                Pair(false, "下载图片时出错：${getPicResponse.second}")
+            }
+            return returnData
         }
 
         //获取天气图片URL

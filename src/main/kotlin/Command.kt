@@ -259,15 +259,14 @@ class SeaSurfaceTempCommand : SimpleCommand(
                 }
             }
 
-            Web.SSTFunc.getSSTbyRTOFS(area) { imageName, err ->
-                if (err == null) {
-                    runBlocking {
-                        val img = imageFolder.resolve(imageName!!).uploadAsImage(group, "png")
-                        group.sendMessage(img)
-                    }
-                } else {
-                    runBlocking { sendMessage(err) }
+            val getSSTResponse = Web.SSTFunc.getSSTbyRTOFS(area)
+            if (getSSTResponse.first) {
+                runBlocking {
+                    val img = imageFolder.resolve(getSSTResponse.second).uploadAsImage(group, "png")
+                    group.sendMessage(img)
                 }
+            } else {
+                runBlocking { sendMessage(getSSTResponse.second) }
             }
         }
     }

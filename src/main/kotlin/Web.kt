@@ -554,12 +554,13 @@ object Web {
     //海温相关函数
     object SSTFunc {
 
-        fun getSSTbyRTOFS(area: String, callback: (String?, String?) -> Unit) {
+        fun getSSTbyRTOFS(area: String): Pair<Boolean, String> {
+            val returnData: Pair<Boolean, String>
             //检查传入海域信息
             //错误时回调ERR
             if (area !in Data.seaforUse) {
-                callback(null, "该海域不存在")
-                return
+                returnData = Pair(false, "该海域不存在")
+                return returnData
             }
 
             val getSSTByRTOFSURLResponse = getSSTbyRTOFSUrl()
@@ -569,25 +570,27 @@ object Web {
                 //根据URL信息获取图片文件
                 val url = "https://www.easterlywave.com/media/typhoon/sst/$time/$area.png"
                 val imageName = "$time-$area.png"
-                if (imageFolder.resolve(imageName).exists()) {
-                    callback(imageName, null)
+
+                returnData = if (imageFolder.resolve(imageName).exists()) {
+                    Pair(true, imageName)
                 } else {
                     val getPicResponse = getPic(url, imageName)
                     if (getPicResponse.first) {
                         //图片文件获取成功
                         //返回图片信息供上传
-                        callback(imageName, null)
+                        Pair(true, imageName)
                     } else {
                         //图片文件获取失败
                         //返回错误信息
-                        callback(null, "下载图片时出错：${getPicResponse.second}")
+                        Pair(false, "下载图片时出错：${getPicResponse.second}")
                     }
                 }
             } else {
                 //图片URL获取失败
                 //返回错误信息
-                callback(null, "获取URL时出错：${getSSTByRTOFSURLResponse.second}")
+                returnData = Pair(false, "获取URL时出错：${getSSTByRTOFSURLResponse.second}")
             }
+            return returnData
         }
 
         private fun getSSTbyRTOFSUrl(): Pair<Boolean, String> {

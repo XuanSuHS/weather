@@ -12,7 +12,7 @@ object weatherMain : KotlinPlugin(
     JvmPluginDescription(
         id = "top.xuansu.mirai.weather",
         name = "Weather",
-        version = "0.1.4-B4",
+        version = "0.1.4-B5",
     ) {
         author("XuanSu")
     }

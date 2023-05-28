@@ -7,7 +7,7 @@ plugins {
 }
 
 group = "top.xuansu.mirai.weather"
-version = "0.1.4-B2"
+version = "0.1.4-B3"
 
 repositories {
     maven("https://maven.aliyun.com/repository/public")

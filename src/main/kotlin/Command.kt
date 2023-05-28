@@ -160,6 +160,18 @@ class TyphoonImgCommand : SimpleCommand(
             return
         }
 
+        //检查台风代号可用性
+        val codeCheckResult = Web.TyphoonFunc.checkTyphoonCode(codeIn)
+        val typhoonCode = when (codeCheckResult.first) {
+            true -> {
+                codeCheckResult.second
+            }
+
+            false -> {
+                sendMessage(codeCheckResult.second)
+                return
+            }
+        }
 
         //检查图片搜索类型可用性
         val imgTypeCheckResult = Web.TyphoonFunc.checkImgType(imageType)
@@ -174,7 +186,13 @@ class TyphoonImgCommand : SimpleCommand(
             }
         }
 
-        val getSatePicResponse = Web.TyphoonFunc.getTyphoonSatePic(codeIn, imgType)
+        if (!Data.TyphoonData[typhoonCode]!!.isSatelliteTarget) {
+            val message = "该台风无图片"
+            sendMessage(message)
+            return
+        }
+
+        val getSatePicResponse = Web.TyphoonFunc.getTyphoonSatePic(typhoonCode, imgType)
         if (getSatePicResponse.first) {
             runBlocking {
                 val img = imageFolder.resolve(getSatePicResponse.second).uploadAsImage(group, "png")
@@ -193,7 +211,7 @@ class TyphoonForecastCommand : SimpleCommand(
     secondaryNames = arrayOf("台风预报", "ty-fore", "ty-forecast", "tyFore")
 ) {
     @Handler
-    suspend fun CommandSender.handle(code: String = "", imageType: String = "") {
+    suspend fun CommandSender.handle(code: String = "") {
         if (getGroupOrNull() == null) {
             sendMessage("请在群聊下执行")
             return
@@ -224,7 +242,16 @@ class TyphoonForecastCommand : SimpleCommand(
                 return
             }
         }
-        //TODO:预报
+
+        val getECForecastResult = Web.TyphoonFunc.getECForecast(typhoonCode)
+        if (getECForecastResult.first) {
+            runBlocking {
+                val img = imageFolder.resolve(getECForecastResult.second).uploadAsImage(group, "png")
+                group.sendMessage(img)
+            }
+        } else {
+            runBlocking { group.sendMessage("出错了：${getECForecastResult.second}") }
+        }
     }
 }
 

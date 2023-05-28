@@ -18,6 +18,8 @@ import java.nio.file.Files
 import java.nio.file.Paths
 import java.nio.file.StandardCopyOption
 import java.util.concurrent.TimeUnit
+import kotlin.collections.contains
+import kotlin.collections.set
 
 
 object Web {
@@ -356,18 +358,21 @@ object Web {
 
 
         fun getECForecast(code: String): Pair<Boolean, String> {
-            var returnData = Pair(false, "ERR")
             val ecTimeResponse = getECTime()
             if (!ecTimeResponse.first) {
-                returnData = Pair(false, ecTimeResponse.second)
-                return returnData
+                return Pair(false, ecTimeResponse.second)
             }
 
+            val typhoonName = Data.TyphoonData[code]!!.name
             val ecTime = ecTimeResponse.second
-            val ecURL = "https://www.easterlywave.com/media/typhoon/ensemble/$ecTime/$code.png"
-            val imageName = "ec-${ecTime}-${code}.png"
-            //val getPicResponse = getPic(url,imageName).
-            return Pair(true, ecURL)
+            val ecURL = "https://www.easterlywave.com/media/typhoon/ensemble/$ecTime/$typhoonName.png"
+            val imageName = "ec-${ecTime}-$typhoonName.png"
+            val getPicResult = getPic(ecURL, imageName)
+            return if (getPicResult.first) {
+                Pair(true, imageName)
+            } else {
+                Pair(false, "下载图片时出错：${getPicResult.second}")
+            }
         }
 
         //获取EC预报时间
@@ -484,27 +489,8 @@ object Web {
         }
 
 
-        fun getTyphoonSatePic(codeIn: String, picType: String): Pair<Boolean, String> {
+        fun getTyphoonSatePic(code: String, picType: String): Pair<Boolean, String> {
             val returnData: Pair<Boolean, String>
-
-            //检查台风代号可用性
-            val codeCheckResult = checkTyphoonCode(codeIn)
-            val code = when (codeCheckResult.first) {
-                true -> {
-                    codeCheckResult.second
-                }
-
-                false -> {
-                    returnData = Pair(false, codeCheckResult.second)
-                    return returnData
-                }
-            }
-
-            //是否有卫星图片
-            if (!Data.TyphoonData[code]!!.isSatelliteTarget) {
-                returnData = Pair(false, "此台风不存在卫星图片")
-                return returnData
-            }
 
             //从Dapiya网站下载指定卫星图片
             val url = "https://data.dapiya.top/history/$code/$picType/${code}_${picType}.png"

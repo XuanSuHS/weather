@@ -424,7 +424,7 @@ class ConfigureCommand : CompositeCommand(
 
     @SubCommand("dev")
     suspend fun CommandSender.dev() {
-
+        sendMessage("NOPE")
     }
 }
 

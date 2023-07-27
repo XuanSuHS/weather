@@ -1,5 +1,6 @@
 package top.xuansu.mirai.weather
 
+import net.mamoe.mirai.console.command.CommandManager
 import net.mamoe.mirai.console.command.CommandManager.INSTANCE.register
 import net.mamoe.mirai.console.plugin.jvm.JvmPluginDescription
 import net.mamoe.mirai.console.plugin.jvm.KotlinPlugin
@@ -12,7 +13,7 @@ object weatherMain : KotlinPlugin(
     JvmPluginDescription(
         id = "top.xuansu.mirai.weather",
         name = "Weather",
-        version = "0.1.4",
+        version = "0.1.5-B1",
     ) {
         author("XuanSu")
     }
@@ -29,6 +30,7 @@ object weatherMain : KotlinPlugin(
         TyphoonImgCommand().register()
         TyphoonForecastCommand().register()
         SeaSurfaceTempCommand().register()
+        GetEnsembleCommand().register()
         DevCommand().register()
         //----------------------
 
@@ -60,5 +62,10 @@ object weatherMain : KotlinPlugin(
         onStart()
 
         logger.info { "Plugin loaded" }
+    }
+
+    override fun onDisable() {
+        CommandManager.INSTANCE.unregisterAllCommands(weatherMain)
+        logger.info { "Plugin Unloaded" }
     }
 }

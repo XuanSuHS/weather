@@ -20,3 +20,16 @@ fun deleteFolderContents(folder: File): Int {
     }
     return 0
 }
+
+fun sortMapWeightByBasin(basin: String): Int {
+    return when (basin) {
+        "wpac" -> 1
+        "eastasia" -> 1
+        "natl" -> 2
+        "epac" -> 3
+        "nio" -> 4
+        "sio" -> 5
+        "aus" -> 6
+        else -> 999 // 在此处可以处理未知或其他情况
+    }
+}

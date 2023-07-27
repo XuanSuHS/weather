@@ -58,19 +58,6 @@ class TyphoonCommand : SimpleCommand(
                 return
             }
 
-            //输出帮助信息
-            if (codeIn.lowercase() in setOf("help", "帮助")) {
-                var message = "显示当前活动台风基础信息\n"
-                    .plus("命令格式：/typhoon [台风代号]\n")
-                    .plus("当前可用台风：")
-                val stormList = Data.TyphoonData.keys.toList()
-                stormList.forEach {
-                    message += "[$it] "
-                }
-                sendMessage(message)
-                return
-            }
-
             //更新台风信息
             val typhoonDataResponse = Web.TyphoonFunc.getTyphoonData()
             if (!typhoonDataResponse.first) {
@@ -78,6 +65,32 @@ class TyphoonCommand : SimpleCommand(
                 return
             }
 
+            //特殊输入则输出帮助信息
+            when (codeIn.lowercase()) {
+                //输出帮助信息
+                in setOf("help", "帮助") -> {
+                    var message = "显示当前活动台风基础信息\n"
+                        .plus("命令格式：/typhoon [台风代号]\n")
+                        .plus("当前可用台风：")
+                    val typhoonList = Data.TyphoonData.keys.toList()
+                    typhoonList.forEach {
+                        message += "[$it] "
+                    }
+                    sendMessage(message)
+                    return
+                }
+
+                //输出台风列表
+                in setOf("list", "列表") -> {
+                    var message = "当前可用台风"
+                    val typhoonList = Data.TyphoonData.keys.toList()
+                    typhoonList.forEach {
+                        message += "[$it] "
+                    }
+                    sendMessage(message)
+                    return
+                }
+            }
 
             var message = ""
             //检查台风代号可用性
@@ -141,26 +154,40 @@ class TyphoonImgCommand : SimpleCommand(
             return
         }
 
-        //输出帮助信息
-        if (codeIn.lowercase() in setOf("help", "帮助")) {
-            var message = "显示当前活动台风卫星图片\n"
-                .plus("命令格式：/typhoon-img [台风代号] [图片类型]\n")
-                .plus("当前可用台风：")
-            val stormList = Data.TyphoonData.keys.toList()
-            stormList.forEach {
-                if (Data.TyphoonData[it]!!.isSatelliteTarget) {
-                    message += "[$it] "
-                }
-            }
-            sendMessage(message)
-            return
-        }
-
         //更新台风信息
         val typhoonDataResponse = Web.TyphoonFunc.getTyphoonData()
         if (!typhoonDataResponse.first) {
             runBlocking { sendMessage("更新信息时出错：$${typhoonDataResponse.second}") }
             return
+        }
+
+        //特殊输入则输出特定信息
+        when (codeIn.lowercase()) {
+            in setOf("help", "帮助") -> {
+                var message = "显示当前活动台风卫星图片\n"
+                    .plus("命令格式：/typhoon-img [台风代号] [图片类型]\n")
+                    .plus("当前可用台风：")
+                val typhoonList = Data.TyphoonData.keys.toList()
+                typhoonList.forEach {
+                    if (Data.TyphoonData[it]!!.isSatelliteTarget) {
+                        message += "[$it] "
+                    }
+                }
+                sendMessage(message)
+                return
+            }
+
+            in setOf("list", "列表") -> {
+                var message = "当前可用台风："
+                val typhoonList = Data.TyphoonData.keys.toList()
+                typhoonList.forEach {
+                    if (Data.TyphoonData[it]!!.isSatelliteTarget) {
+                        message += "[$it] "
+                    }
+                }
+                sendMessage(message)
+                return
+            }
         }
 
         //检查台风代号可用性
@@ -210,8 +237,8 @@ class TyphoonImgCommand : SimpleCommand(
 
 class TyphoonForecastCommand : SimpleCommand(
     owner = weatherMain,
-    primaryName = "typhoon-forecast",
-    secondaryNames = arrayOf("台风预报", "ty-fore", "ty-forecast", "tyFore")
+    primaryName = "typhoon-ensemble",
+    secondaryNames = arrayOf("台风预报", "ty-ensemble", "tyEns", "tyens")
 ) {
     @Handler
     suspend fun CommandSender.handle(code: String = "") {
@@ -246,11 +273,13 @@ class TyphoonForecastCommand : SimpleCommand(
             }
         }
 
-        val getECForecastResult = Web.TyphoonFunc.getECForecast(typhoonCode)
+        val getECForecastResult = Web.TyphoonFunc.getECEnsemble(typhoonCode)
         if (getECForecastResult.first) {
+            val foreCastResult = getECForecastResult.second.split("||")
             runBlocking {
-                val img = imageFolder.resolve(getECForecastResult.second).uploadAsImage(group, "png")
-                group.sendMessage(img)
+                val typhoonImg = imageFolder.resolve(foreCastResult[0]).uploadAsImage(group, "png")
+                val seaImg = imageFolder.resolve(foreCastResult[1]).uploadAsImage(group, "png")
+                group.sendMessage(typhoonImg + "\n" + seaImg)
             }
         } else {
             runBlocking { group.sendMessage("出错了：${getECForecastResult.second}") }
@@ -279,17 +308,17 @@ class SeaSurfaceTempCommand : SimpleCommand(
                     Config.defaultSeaArea
                 }
 
-                !in Data.seaforUse -> {
-                    runBlocking { sendMessage("该海域不存在") }
-                    return
+                in Data.seaforUse -> {
+                    areaIn
                 }
 
                 else -> {
-                    areaIn
+                    runBlocking { sendMessage("该海域不存在") }
+                    return
                 }
             }
 
-            val getSSTResponse = Web.SSTFunc.getSSTbyRTOFS(area)
+            val getSSTResponse = Web.SSTFunc.getSST(area)
             if (getSSTResponse.first) {
                 runBlocking {
                     val img = imageFolder.resolve(getSSTResponse.second).uploadAsImage(group, "png")
@@ -350,6 +379,20 @@ class ConfigureCommand : CompositeCommand(
                         Config.save()
                     } else {
                         runBlocking { sendMessage("代理地址无效，请检查输入是否有误") }
+                    }
+                }
+            }
+
+            "check" -> {
+                if (!Config.isProxyEnabled) {
+                    runBlocking { sendMessage("当前未开启代理") }
+                    return
+                }
+                Web.ProxyFunc.checkProxy(Config.proxyAddress) { status ->
+                    if (status) {
+                        runBlocking { sendMessage("当前地址为 ${Config.proxyAddress} 代理有效") }
+                    } else {
+                        runBlocking { sendMessage("当前地址为 ${Config.proxyAddress} 代理地址无效，请检查") }
                     }
                 }
             }
@@ -428,17 +471,50 @@ class ConfigureCommand : CompositeCommand(
     }
 }
 
+class GetEnsembleCommand : SimpleCommand(
+    owner = weatherMain,
+    primaryName = "getensemble",
+    secondaryNames = arrayOf("getens")
+) {
+    @Handler
+    suspend fun CommandSender.handle(arg: String = "") {
+        var ens = arg.lowercase()
+        if (ens == "") {
+            ens = Config.defaultEnsemble
+        }
+        when (ens.lowercase()) {
+            in arrayOf("ec", "ecmwf", "ecens") -> {
+                val ecResult = Web.TyphoonFunc.getECTime()
+                if (!ecResult.first) {
+                    sendMessage("获取ECMWF基准时间失败:${ecResult.second}")
+                }
+                var messageOut = "当前ECMWF可用基准时间："
+                for (i in Data.ecEnsembleTime) {
+                    messageOut += "\n${i.key}:"
+                    for (j in i.value) {
+                        messageOut += " $j"
+                    }
+                }
+                sendMessage(messageOut)
+            }
+
+            in arrayOf("gfs", "gefs") -> {
+                sendMessage("还没做捏")
+            }
+
+            else -> {
+                sendMessage("暂不支持此机构或输入错误")
+            }
+        }
+    }
+}
+
 class DevCommand : SimpleCommand(
     owner = weatherMain,
     primaryName = "dev",
 ) {
     @Handler
     suspend fun CommandSender.handle(code: String) {
-        val getECResponse = Web.TyphoonFunc.getECForecast(code)
-        if (getECResponse.first) {
-            sendMessage("GOOD:${getECResponse.second}")
-        } else {
-            sendMessage("ERR:${getECResponse.second}")
-        }
+        sendMessage("${code}NOPE")
     }
 }

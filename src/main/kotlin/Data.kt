@@ -12,6 +12,7 @@ object Data {
         Pair("micronesia", "中太平洋/密克罗尼西亚")
     )
 
+    var ecEnsembleTime = mutableMapOf<Int, MutableSet<String>>()
     val sateImgType = setOf(
         "VIS",
         "EVIS",

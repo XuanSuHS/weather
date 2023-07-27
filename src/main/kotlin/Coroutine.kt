@@ -10,7 +10,7 @@ fun onStart() {
     CoroutineScope(Dispatchers.IO).launch {
         val getCookieResult = Web.getCookie()
         if (!getCookieResult.first) {
-            logger.info { "Error in getting Cookie：${getCookieResult.second}" }
+            logger.info { "Error getting Cookie：${getCookieResult.second}" }
             return@launch
         }
         logger.info { "Cookies Reset" }
@@ -18,7 +18,7 @@ fun onStart() {
         if (typhoonDataResponse.first) {
             logger.info { "Typhoon Data Loaded" }
         } else {
-            logger.info { "Error in loading typhoon Data：${typhoonDataResponse.second}" }
+            logger.info { "Error loading typhoon Data：${typhoonDataResponse.second}" }
         }
     }
 }
